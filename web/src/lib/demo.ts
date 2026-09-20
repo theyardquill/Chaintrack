@@ -219,13 +219,14 @@ export function bookShipment(
 
 export function logCheckpoint(
   state: ChainTrackState,
-  input: { packageId: number; location: string; status: PackageStatus }
+  input: { packageId: number; location: string; status: PackageStatus; agentId?: number }
 ): ChainTrackState {
   const now = Date.now();
   const id = ++nextId;
+  const agentId = input.agentId ?? 3;
   const packages = state.packages.map((p) =>
     p.id === input.packageId
-      ? { ...p, status: input.status, activeAgentId: 3 }
+      ? { ...p, status: input.status, activeAgentId: agentId }
       : p
   );
   const checkpoints: Checkpoint[] = [
@@ -233,7 +234,7 @@ export function logCheckpoint(
     {
       id,
       packageId: input.packageId,
-      agentId: 3,
+      agentId,
       location: input.location,
       timestamp: now,
       status: input.status,
@@ -278,7 +279,7 @@ export function registerUser(
   state: ChainTrackState,
   input: { name: string; phone: string; role: Role }
 ): { state: ChainTrackState; userId: number } {
-  const id = ++nextId;
+  const id = Math.max(0, ...state.users.map((u) => u.id)) + 1;
   return {
     state: {
       ...state,

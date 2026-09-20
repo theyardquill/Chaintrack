@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Lock, RefreshCcw, UserPlus, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import { useChainTrack, useStoreState } from "@/lib/chain";
+import { loadSession } from "@/lib/auth";
 import { TXN_LABEL, type Role } from "@/lib/types";
 import { fmtAmount, fmtDate } from "@/lib/format";
 
@@ -28,6 +30,32 @@ const ROLE_BADGE: Record<Role, string> = {
 };
 
 export default function AdminPage() {
+  const router = useRouter();
+  const [authed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return loadSession()?.type === "admin";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (!authed) router.replace("/admin/login");
+  }, [authed, router]);
+
+  if (!authed) {
+    return (
+      <div className="py-20 text-center text-sm text-muted-foreground">
+        Checking admin session…
+      </div>
+    );
+  }
+
+  return <AdminShell />;
+}
+
+function AdminShell() {
   const { state, register, reset } = useChainTrack();
   const { userById } = useStoreState(state);
 

@@ -45,9 +45,9 @@ export function useChainTrack() {
   );
 
   const track = useCallback(
-    (location: string, status: Checkpoint["status"], packageId: number) => {
+    (location: string, status: Checkpoint["status"], packageId: number, agentId?: number) => {
       // checkpoints can only advance status
-      const next = logInDemo(state, { packageId, location, status });
+      const next = logInDemo(state, { packageId, location, status, agentId });
       update(next);
     },
     [state, update]
