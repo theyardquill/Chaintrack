@@ -1,0 +1,20 @@
+{
+  "name": "contracts",
+  "version": "0.1.0",
+  "description": "ChainTrack smart contracts (Hardhat)",
+  "packageManager": "pnpm@10.32.1",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.29.1"
+  }
+}

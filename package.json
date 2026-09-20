@@ -1,0 +1,28 @@
+{
+  "name": "chaintrack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ChainTrack - blockchain-backed shipping tracking with smart-contract escrow",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "contracts:compile": "pnpm --filter contracts hardhat compile",
+    "contracts:test": "pnpm --filter contracts hardhat test",
+    "contracts:deploy": "pnpm --filter contracts hardhat run scripts/deploy.ts"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "secp256k1",
+      "keccak",
+      "unrs-resolver",
+      "esbuild",
+      "bcrypt",
+      "wdio"
+    ]
+  }
+}
