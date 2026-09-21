@@ -1,9 +1,0 @@
-{
-  "networks": {
-    "1337": {
-      "ChainTrack": {
-        "address": ""
-      }
-    }
-  }
-}
