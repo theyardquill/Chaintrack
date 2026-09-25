@@ -189,6 +189,8 @@ export const chainGetPackageByCode = async (code: string): Promise<Package | nul
 
 export const chainGetTransaction = async (packageId: number): Promise<Transaction> => {
   const { contract } = await getChainTrack();
+  // getTransaction returns without id: [packageId, senderId, receiverId,
+  // amount, currency, status, createdAt, settledAt].
   const t: [
     string,
     string,
@@ -197,19 +199,19 @@ export const chainGetTransaction = async (packageId: number): Promise<Transactio
     string,
     string,
     number,
-    string,
     string
   ] = await contract.methods.getTransaction(packageId).call();
+  const id = Number(t[0]);
   return {
-    id: Number(t[0]),
-    packageId: Number(t[1]),
-    senderId: Number(t[2]),
-    receiverId: Number(t[3]),
-    amount: Number(t[4]),
-    currency: t[5],
-    status: txnStatusFromNum(t[6]),
-    createdAt: Number(t[7]),
-    settledAt: t[8] ? Number(t[8]) : null,
+    id,
+    packageId: Number(t[0]),
+    senderId: Number(t[1]),
+    receiverId: Number(t[2]),
+    amount: Number(t[3]),
+    currency: t[4],
+    status: txnStatusFromNum(t[5]),
+    createdAt: Number(t[6]),
+    settledAt: t[7] ? Number(t[7]) : null,
   };
 };
 

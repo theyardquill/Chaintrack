@@ -10,6 +10,7 @@ build/
 # hardhat
 artifacts/
 cache/
+web/src/contracts/demo-wallets.json
 
 # coverage
 coverage/

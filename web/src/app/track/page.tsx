@@ -63,6 +63,8 @@ function TrackContent() {
         </Button>
       </form>
 
+      {searched && <OnChainRecord code={searched} />}
+
       {searched && !pkg && (
         <Alert variant="default">
           <AlertTitle>No package found</AlertTitle>
@@ -75,7 +77,6 @@ function TrackContent() {
       {pkg && (
         <>
           <PackageCard state={state} pkg={pkg} showQr />
-          <OnChainRecord code={searched} />
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Route & escrow</CardTitle>
