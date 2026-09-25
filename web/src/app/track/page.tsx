@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PackageCard } from "@/components/package-card";
 import { TrackingTimeline } from "@/components/tracking-timeline";
+import { OnChainRecord } from "@/components/on-chain-record";
 import { useChainTrack, useStoreState } from "@/lib/chain";
 import { TXN_LABEL } from "@/lib/types";
 import { fmtAmount } from "@/lib/format";
@@ -74,6 +75,7 @@ function TrackContent() {
       {pkg && (
         <>
           <PackageCard state={state} pkg={pkg} showQr />
+          <OnChainRecord code={searched} />
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Route & escrow</CardTitle>

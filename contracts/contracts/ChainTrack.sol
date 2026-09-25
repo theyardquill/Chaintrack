@@ -102,6 +102,8 @@ contract ChainTrack {
     mapping(uint256 => Checkpoint) public checkpoints;
     mapping(address => uint256) public userIdByAddress;
     mapping(uint256 => uint256[]) private packageCheckpoints;
+    // Enabled on-chain tracking by QR code without a full index.
+    mapping(string => uint256) public packageIdByCode;
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");
@@ -148,6 +150,9 @@ contract ChainTrack {
         uint256 senderId = userIdByAddress[msg.sender];
         packageCtr++;
         txnCtr++;
+
+        require(packageIdByCode[_qrHash] == 0, "QR code already booked");
+        packageIdByCode[_qrHash] = packageCtr;
 
         packages[packageCtr] = Package({
             id: packageCtr,

@@ -64,6 +64,7 @@ export interface ChainTrackInterface extends Interface {
       | "logCheckpoint"
       | "owner"
       | "packageCtr"
+      | "packageIdByCode"
       | "packages"
       | "registerUser"
       | "transactions"
@@ -132,6 +133,10 @@ export interface ChainTrackInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "packageIdByCode",
+    values: [string]
+  ): string;
+  encodeFunctionData(
     functionFragment: "packages",
     values: [BigNumberish]
   ): string;
@@ -186,6 +191,10 @@ export interface ChainTrackInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "packageCtr", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "packageIdByCode",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "packages", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "registerUser",
@@ -472,6 +481,8 @@ export interface ChainTrack extends BaseContract {
 
   packageCtr: TypedContractMethod<[], [bigint], "view">;
 
+  packageIdByCode: TypedContractMethod<[arg0: string], [bigint], "view">;
+
   packages: TypedContractMethod<
     [arg0: BigNumberish],
     [
@@ -678,6 +689,9 @@ export interface ChainTrack extends BaseContract {
   getFunction(
     nameOrSignature: "packageCtr"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "packageIdByCode"
+  ): TypedContractMethod<[arg0: string], [bigint], "view">;
   getFunction(
     nameOrSignature: "packages"
   ): TypedContractMethod<

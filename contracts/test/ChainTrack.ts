@@ -87,6 +87,29 @@ describe("ChainTrack", function () {
           })
       ).to.be.revertedWith("Not registered");
     });
+
+    it("indexes packages by QR code", async function () {
+      const { chainTrack } = await loadFixture(bookShipmentFixture);
+      expect(await chainTrack.packageIdByCode("CTK-0001")).to.equal(1);
+    });
+
+    it("rejects duplicate QR codes", async function () {
+      const { chainTrack, sender } = await loadFixture(bookShipmentFixture);
+      await expect(
+        chainTrack
+          .connect(sender)
+          .bookShipment(
+            "CTK-0001",
+            ethers.keccak256(ethers.toUtf8Bytes("another")),
+            1,
+            "S",
+            2,
+            ethers.ZeroHash,
+            "ETH",
+            { value: ethers.parseEther("0.01") }
+          )
+      ).to.be.revertedWith("QR code already booked");
+    });
   });
 
   describe("checkpoint logging", function () {
