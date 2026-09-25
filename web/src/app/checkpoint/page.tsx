@@ -18,9 +18,11 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatusBadge } from "@/components/status-badge";
 import { ChainStatus } from "@/components/chain-status";
+import { ReceiptCard } from "@/components/receipt-card";
 import { useChainTrack, useStoreState } from "@/lib/chain";
 import { useChainContract } from "@/lib/use-chain-contract";
 import { chainGetUserByAddress } from "@/lib/web3";
+import { onChainReceipt } from "@/lib/chain-receipt";
 import { loadSession } from "@/lib/auth";
 import { STATUS_LABEL, type PackageStatus } from "@/lib/types";
 import { fmtDate } from "@/lib/format";
@@ -28,7 +30,7 @@ import { fmtDate } from "@/lib/format";
 const NEXT_STATUS: Record<PackageStatus, PackageStatus[]> = {
   Registered: ["InTransit"],
   InTransit: ["OutForDelivery"],
-  OutForDelivery: [],
+  OutForDelivery: ["Delivered"],
   Delivered: [],
   Failed: [],
   Cancelled: [],
@@ -63,6 +65,7 @@ export default function CheckpointPage() {
   const [recordOnChain, setRecordOnChain] = useState(false);
   const [chainMsg, setChainMsg] = useState<string | null>(null);
   const [chainErr, setChainErr] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<{ code: string; packageId: number; hash: string; stored: string | null } | null>(null);
 
   const current = state.packages.find((p) => p.id === Number(packageId));
   const nextOptions = current ? NEXT_STATUS[current.status] : [];
@@ -119,9 +122,17 @@ export default function CheckpointPage() {
             location: location.trim(),
             status,
           });
-          setChainMsg(
-            `Logged on-chain by agent #${onChainAgent.id} · tx ${tx}`
-          );
+          let msg = `Logged on-chain by agent #${onChainAgent.id} · tx ${tx}`;
+          if (status === "Delivered") {
+            const { hash } = await onChainReceipt(onChain);
+            const receiptTx = await chain.recordReceipt({
+              packageId: onChain.id,
+              receiptHash: hash,
+            });
+            msg += `\nReceipt stored on-chain · tx ${receiptTx}`;
+            setReceipt({ code: onChain.qrHash, packageId: onChain.id, hash, stored: hash });
+          }
+          setChainMsg(msg);
         } catch (err) {
           setChainErr(err instanceof Error ? err.message : String(err));
         }
@@ -251,6 +262,15 @@ export default function CheckpointPage() {
           <Scan /> Log checkpoint event
         </Button>
       </form>
+
+      {current?.status === "Delivered" && (
+        <ReceiptCard
+          code={current.qrHash}
+          chainPackageId={receipt?.packageId ?? undefined}
+          chainHash={receipt?.code === current.qrHash ? receipt.hash : null}
+          storedHash={receipt?.code === current.qrHash ? receipt.stored : null}
+        />
+      )}
 
       {selectedCheckpoints.length > 0 && (
         <Card>

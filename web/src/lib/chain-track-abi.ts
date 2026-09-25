@@ -139,6 +139,31 @@ export const CHAIN_TRACK_ABI = [
       {
         "indexed": true,
         "internalType": "uint256",
+        "name": "packageId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "recordedBy",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "receiptHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ReceiptRecorded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
         "name": "userId",
         "type": "uint256"
       },
@@ -294,6 +319,11 @@ export const CHAIN_TRACK_ABI = [
         "internalType": "string",
         "name": "_deliveryCode",
         "type": "string"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_receiptHash",
+        "type": "bytes32"
       }
     ],
     "name": "confirmDelivery",
@@ -411,6 +441,25 @@ export const CHAIN_TRACK_ABI = [
         "internalType": "uint256",
         "name": "deliveredAt",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_packageId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getReceiptHash",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -610,6 +659,43 @@ export const CHAIN_TRACK_ABI = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "receiptHashes",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_packageId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_receiptHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "recordReceipt",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

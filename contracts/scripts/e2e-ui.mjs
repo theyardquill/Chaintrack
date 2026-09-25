@@ -205,8 +205,75 @@ async function main() {
     await sleep(700);
   }
   check("delivery confirmed on-chain (escrow released)", await has("Transaction confirmed"));
+  check("receipt shown after delivery", await has("Proof of delivery"));
+  check("receipt verified on-chain", await has("Verified on-chain"));
+  const recURL = await evalJS(`(()=>{const a=document.querySelector("a[href^='/receipt/']"); return a?a.getAttribute("href"):null;})()`);
+  check("receipt print link present", !!recURL, recURL ?? "none");
+  await goto(`${BASE}${recURL}`);
+  await sleep(1000);
+  await evalJS(`window.__setAcc(${JSON.stringify(ACCT[1])})`);
+  await clickByText("Connect wallet to unlock on-chain escrow");
+  await sleep(2500);
+  check("receipt page verifies against the contract", await has("Verified — on-chain hash matches this document"));
 
-  // ---- 5. Seed package sanity: CTK-9000 should already exist on-chain.
+  // ---- 5. Agent "marking as delivered" flow: ship a second package, drive it
+  //          to Delivered from the checkpoint console, assert the receipt card
+  //          and its on-chain storage (recordReceipt).
+  await goto(`${BASE}/ship`);
+  await evalJS(`localStorage.removeItem("chaintrack-session")`);
+  await sleep(800);
+  await clickByText("Connect wallet to unlock on-chain escrow");
+  await sleep(2500);
+  await setInput("e.g. electronics, documents…", "medical supplies");
+  await setInput("MFA code for confirmation", "MED-9999");
+  await evalJS(`(()=>{const cb=[...document.querySelectorAll("input[type=checkbox]")].find(c=>c.closest("label")?.innerText.includes("Also book this shipment")); if(!cb) return false; cb.click(); return true;})()`);
+  await clickByText("Book shipment & lock escrow");
+  for (let i = 0; i < 30; i++) {
+    if (await has("On-chain booking confirmed")) break;
+    await sleep(700);
+  }
+  const code2 = await evalJS(`(()=>{const m=document.body.innerText.match(/track\\?code=(CTK-\\d{4})/); return m?m[1]:null;})()`);
+  check("second tracking code", !!code2, code2 ?? "none");
+  const filtered = await evalJS(`(()=>{const s=JSON.parse(localStorage.getItem("chaintrack-demo-v1")); if(!s) return "NO STORE"; const code=${JSON.stringify(code2)}; const pkg=s.packages.find(p=>p.qrHash===code); if(!pkg) return "NO PKG"; const keep=pkg.id; s.packages=[pkg]; s.transactions=s.transactions.filter(t=>t.packageId===keep); s.checkpoints=s.checkpoints.filter(c=>c.packageId===keep); localStorage.setItem("chaintrack-demo-v1", JSON.stringify(s)); return "OK";})()`);
+  check("demo store scoped to the new package", filtered === "OK", filtered);
+
+  await goto(`${BASE}/agent/login`);
+  await evalJS(`localStorage.setItem("chaintrack-session", JSON.stringify({type:"user",user:{id:3,name:"Courier Corp",phone:"+254711000003",role:"AGENT"}}))`);
+  await goto(`${BASE}/checkpoint`);
+  await sleep(1200);
+  await evalJS(`window.__setAcc(${JSON.stringify(ACCT[2])})`);
+  await clickByText("Connect wallet to unlock on-chain escrow");
+  await sleep(2500);
+  const agentLog = async (label, loc) => {
+    const picked = await evalJS(`(async()=>{const trig=document.querySelector("button[aria-haspopup='listbox']"); if(!trig) return "NO TRIG"; trig.click(); await new Promise(r=>setTimeout(r,600)); const opt=[...document.querySelectorAll("[role=option]")].find(o=>o.textContent.includes(${JSON.stringify(code2)})); if(!opt) return "NO OPT"; opt.click(); await new Promise(r=>setTimeout(r,400)); return "OK";})()`);
+    if (picked !== "OK") return "PICK " + picked;
+    if (label) {
+      const st = await evalJS(`(async()=>{const trigs=[...document.querySelectorAll("button[aria-haspopup='listbox']")]; const trig=trigs[1]; if(!trig) return "NO TRIG"; trig.click(); await new Promise(r=>setTimeout(r,600)); const opt=[...document.querySelectorAll("[role=option]")].find(o=>o.textContent.includes(${JSON.stringify(label)})); if(!opt) return "NO OPT"; opt.click(); await new Promise(r=>setTimeout(r,400)); return "OK";})()`);
+      if (st !== "OK") return "STATUS " + st;
+    }
+    await setInput("e.g. JKIA Cargo Terminal", loc);
+    const cb = await evalJS(`(()=>{const cb=[...document.querySelectorAll("input[type=checkbox]")].find(c=>c.closest("label")?.innerText.includes("Also write this checkpoint")); if(!cb) return "NO CB"; if(!cb.checked) cb.click(); return cb.checked ? "ON" : "OFF";})()`);
+    return cb;
+  };
+  for (const [label, loc] of [[null, "Nairobi Hub"], ["Out for Delivery", "Last-Mile Dispatch"], ["Delivered", "Recipient door"]]) {
+    const prep = await agentLog(label, loc);
+    await clickByText("Log checkpoint event");
+    let ok = false;
+    for (let i = 0; i < 30; i++) {
+      if (await has("On-chain checkpoint logged")) { ok = true; break; }
+      await sleep(700);
+    }
+    if (!ok) {
+      console.error("AGENT-DEBUG:", JSON.stringify(await evalJS(`({alerts:[...document.querySelectorAll("[role=alert]")].map(e=>e.innerText), prep:${JSON.stringify(prep)}, body: document.body.innerText.slice(0, 700)})`)));
+    }
+    check(`checkpoint logged on-chain [${label ?? "In Transit"}]`, ok, prep);
+  }
+  check("agent marks delivered from console", await has("Receipt stored on-chain"));
+  check("agent-flow receipt card shown", await has("Proof of delivery"));
+  check("agent-flow receipt verified on-chain", await has("Verified on-chain"));
+  check("agent-flow receipt reference present", await has("receipt #"));
+
+  // ---- 6. Seed package sanity: CTK-9000 should already exist on-chain.
   await goto(`${BASE}/track?code=CTK-9000`);
   await sleep(1200);
   await evalJS(`window.__setAcc(${JSON.stringify(ACCT[1])})`);

@@ -10,9 +10,11 @@ import {
   chainConfirmDelivery,
   chainGetCheckpoints,
   chainGetPackageByCode,
+  chainGetReceiptHash,
   chainGetTransaction,
   chainGetUserByAddress,
   chainLogCheckpoint,
+  chainRecordReceipt,
   chainRegisterUser,
   getChainTrack,
   type ChainTrackConnection,
@@ -59,7 +61,13 @@ export interface ChainContractApi {
   confirmDelivery: (args: {
     packageId: number;
     deliveryCode: string;
+    receiptHash: string;
   }) => Promise<string>;
+  recordReceipt: (args: {
+    packageId: number;
+    receiptHash: string;
+  }) => Promise<string>;
+  getReceiptHash: (packageId: number) => Promise<string | null>;
   cancelShipment: (packageId: number) => Promise<string>;
 }
 
@@ -162,6 +170,8 @@ export function useChainContract(): ChainContractApi {
     bookShipment: chainBookShipment,
     logCheckpoint: chainLogCheckpoint,
     confirmDelivery: chainConfirmDelivery,
+    recordReceipt: chainRecordReceipt,
+    getReceiptHash: chainGetReceiptHash,
     cancelShipment: chainCancelShipment,
   };
 }

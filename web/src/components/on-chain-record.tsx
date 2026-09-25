@@ -14,8 +14,11 @@ import {
   chainConfirmDelivery,
   chainGetCheckpoints,
   chainGetPackageByCode,
+  chainGetReceiptHash,
   chainGetTransaction,
 } from "@/lib/web3";
+import { onChainReceipt } from "@/lib/chain-receipt";
+import { ReceiptCard } from "@/components/receipt-card";
 import type { Checkpoint, Package, Transaction } from "@/lib/types";
 
 interface OnChainRecordProps {
@@ -33,6 +36,8 @@ export function OnChainRecord({ code }: OnChainRecordProps) {
   const [confirming, setConfirming] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [receiptHash, setReceiptHash] = useState<string | null>(null);
+  const [storedReceiptHash, setStoredReceiptHash] = useState<string | null>(null);
 
   useEffect(() => {
     if (chain.status !== "ready" || !code.trim()) return;
@@ -43,6 +48,8 @@ export function OnChainRecord({ code }: OnChainRecordProps) {
       setLookupDone(false);
       setTxHash(null);
       setActionError(null);
+      setReceiptHash(null);
+      setStoredReceiptHash(null);
       try {
         const found = await chainGetPackageByCode(code.trim());
         if (!active) return;
@@ -52,14 +59,21 @@ export function OnChainRecord({ code }: OnChainRecordProps) {
           setCheckpoints([]);
           return;
         }
-        const [chainTxn, chainPoints] = await Promise.all([
+        const [chainTxn, chainPoints, stored] = await Promise.all([
           chainGetTransaction(found.id).catch(() => null),
           chainGetCheckpoints(found.id),
+          chainGetReceiptHash(found.id),
         ]);
         if (!active) return;
         setPkg(found);
         setTxn(chainTxn);
         setCheckpoints(chainPoints);
+        setStoredReceiptHash(stored);
+        try {
+          setReceiptHash((await onChainReceipt(found)).hash);
+        } catch {
+          setReceiptHash(null);
+        }
       } catch {
         if (!active) return;
         setPkg(null);
@@ -80,12 +94,21 @@ export function OnChainRecord({ code }: OnChainRecordProps) {
   const confirm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pkg) return;
+    if (!receiptHash) {
+      setActionError("Could not compute the receipt hash for this delivery.");
+      return;
+    }
     setConfirming(true);
     setActionError(null);
     try {
-      const hash = await chainConfirmDelivery({ packageId: pkg.id, deliveryCode: confirmCode });
+      const hash = await chainConfirmDelivery({
+        packageId: pkg.id,
+        deliveryCode: confirmCode,
+        receiptHash,
+      });
       setTxHash(hash);
       setConfirmCode("");
+      setStoredReceiptHash(receiptHash);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -192,6 +215,15 @@ export function OnChainRecord({ code }: OnChainRecordProps) {
                 <AlertTitle>Transaction failed</AlertTitle>
                 <AlertDescription>{actionError}</AlertDescription>
               </Alert>
+            )}
+
+            {(pkg.status === "Delivered" || txHash) && (
+              <ReceiptCard
+                code={pkg.qrHash}
+                chainPackageId={pkg.id}
+                chainHash={receiptHash}
+                storedHash={storedReceiptHash}
+              />
             )}
           </>
         )}

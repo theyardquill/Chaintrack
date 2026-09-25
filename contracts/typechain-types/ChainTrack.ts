@@ -60,12 +60,15 @@ export interface ChainTrackInterface extends Interface {
       | "confirmDelivery"
       | "getCheckpoints"
       | "getPackage"
+      | "getReceiptHash"
       | "getTransaction"
       | "logCheckpoint"
       | "owner"
       | "packageCtr"
       | "packageIdByCode"
       | "packages"
+      | "receiptHashes"
+      | "recordReceipt"
       | "registerUser"
       | "transactions"
       | "txnCtr"
@@ -80,6 +83,7 @@ export interface ChainTrackInterface extends Interface {
       | "DeliveryConfirmed"
       | "EscrowReleased"
       | "PackageBooked"
+      | "ReceiptRecorded"
       | "UserRegistered"
   ): EventFragment;
 
@@ -109,7 +113,7 @@ export interface ChainTrackInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "confirmDelivery",
-    values: [BigNumberish, string]
+    values: [BigNumberish, string, BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "getCheckpoints",
@@ -117,6 +121,10 @@ export interface ChainTrackInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "getPackage",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getReceiptHash",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
@@ -139,6 +147,14 @@ export interface ChainTrackInterface extends Interface {
   encodeFunctionData(
     functionFragment: "packages",
     values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "receiptHashes",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "recordReceipt",
+    values: [BigNumberish, BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "registerUser",
@@ -182,6 +198,10 @@ export interface ChainTrackInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "getPackage", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "getReceiptHash",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getTransaction",
     data: BytesLike
   ): Result;
@@ -196,6 +216,14 @@ export interface ChainTrackInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "packages", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "receiptHashes",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "recordReceipt",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "registerUser",
     data: BytesLike
@@ -300,6 +328,28 @@ export namespace PackageBookedEvent {
     receiverId: bigint;
     amount: bigint;
     currency: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace ReceiptRecordedEvent {
+  export type InputTuple = [
+    packageId: BigNumberish,
+    recordedBy: BigNumberish,
+    receiptHash: BytesLike
+  ];
+  export type OutputTuple = [
+    packageId: bigint,
+    recordedBy: bigint,
+    receiptHash: string
+  ];
+  export interface OutputObject {
+    packageId: bigint;
+    recordedBy: bigint;
+    receiptHash: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -413,7 +463,7 @@ export interface ChainTrack extends BaseContract {
   >;
 
   confirmDelivery: TypedContractMethod<
-    [_packageId: BigNumberish, _deliveryCode: string],
+    [_packageId: BigNumberish, _deliveryCode: string, _receiptHash: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -451,6 +501,12 @@ export interface ChainTrack extends BaseContract {
         deliveredAt: bigint;
       }
     ],
+    "view"
+  >;
+
+  getReceiptHash: TypedContractMethod<
+    [_packageId: BigNumberish],
+    [string],
     "view"
   >;
 
@@ -515,6 +571,14 @@ export interface ChainTrack extends BaseContract {
       }
     ],
     "view"
+  >;
+
+  receiptHashes: TypedContractMethod<[arg0: BigNumberish], [string], "view">;
+
+  recordReceipt: TypedContractMethod<
+    [_packageId: BigNumberish, _receiptHash: BytesLike],
+    [void],
+    "nonpayable"
   >;
 
   registerUser: TypedContractMethod<
@@ -616,7 +680,7 @@ export interface ChainTrack extends BaseContract {
   getFunction(
     nameOrSignature: "confirmDelivery"
   ): TypedContractMethod<
-    [_packageId: BigNumberish, _deliveryCode: string],
+    [_packageId: BigNumberish, _deliveryCode: string, _receiptHash: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -658,6 +722,9 @@ export interface ChainTrack extends BaseContract {
     ],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "getReceiptHash"
+  ): TypedContractMethod<[_packageId: BigNumberish], [string], "view">;
   getFunction(
     nameOrSignature: "getTransaction"
   ): TypedContractMethod<
@@ -726,6 +793,16 @@ export interface ChainTrack extends BaseContract {
       }
     ],
     "view"
+  >;
+  getFunction(
+    nameOrSignature: "receiptHashes"
+  ): TypedContractMethod<[arg0: BigNumberish], [string], "view">;
+  getFunction(
+    nameOrSignature: "recordReceipt"
+  ): TypedContractMethod<
+    [_packageId: BigNumberish, _receiptHash: BytesLike],
+    [void],
+    "nonpayable"
   >;
   getFunction(
     nameOrSignature: "registerUser"
@@ -818,6 +895,13 @@ export interface ChainTrack extends BaseContract {
     PackageBookedEvent.OutputObject
   >;
   getEvent(
+    key: "ReceiptRecorded"
+  ): TypedContractEvent<
+    ReceiptRecordedEvent.InputTuple,
+    ReceiptRecordedEvent.OutputTuple,
+    ReceiptRecordedEvent.OutputObject
+  >;
+  getEvent(
     key: "UserRegistered"
   ): TypedContractEvent<
     UserRegisteredEvent.InputTuple,
@@ -868,6 +952,17 @@ export interface ChainTrack extends BaseContract {
       PackageBookedEvent.InputTuple,
       PackageBookedEvent.OutputTuple,
       PackageBookedEvent.OutputObject
+    >;
+
+    "ReceiptRecorded(uint256,uint256,bytes32)": TypedContractEvent<
+      ReceiptRecordedEvent.InputTuple,
+      ReceiptRecordedEvent.OutputTuple,
+      ReceiptRecordedEvent.OutputObject
+    >;
+    ReceiptRecorded: TypedContractEvent<
+      ReceiptRecordedEvent.InputTuple,
+      ReceiptRecordedEvent.OutputTuple,
+      ReceiptRecordedEvent.OutputObject
     >;
 
     "UserRegistered(uint256,uint8,address,string)": TypedContractEvent<

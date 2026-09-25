@@ -144,17 +144,19 @@ describe("ChainTrack", function () {
       await chainTrack.connect(agent).logCheckpoint(1, "Destination", 2);
 
       const senderBefore = await ethers.provider.getBalance(sender.address);
+      const receiptHash = ethers.keccak256(ethers.toUtf8Bytes("POD receipt v1"));
 
       await expect(
-        chainTrack.connect((await ethers.getSigners())[2]).confirmDelivery(1, "wrong-code")
+        chainTrack.connect((await ethers.getSigners())[2]).confirmDelivery(1, "wrong-code", receiptHash)
       ).to.be.revertedWith("Invalid delivery code");
 
       await expect(
-        chainTrack.connect((await ethers.getSigners())[2]).confirmDelivery(1, deliveryCode)
+        chainTrack.connect((await ethers.getSigners())[2]).confirmDelivery(1, deliveryCode, receiptHash)
       ).to.emit(chainTrack, "EscrowReleased");
 
       expect((await chainTrack.packages(1)).status).to.equal(3); // Delivered
       expect((await chainTrack.getTransaction(1)).status).to.equal(2); // Paid
+      expect(await chainTrack.getReceiptHash(1)).to.equal(receiptHash);
 
       const senderAfter = await ethers.provider.getBalance(sender.address);
       expect(senderAfter).to.be.gt(senderBefore);
@@ -163,6 +165,29 @@ describe("ChainTrack", function () {
       expect(
         await ethers.provider.getBalance(await chainTrack.getAddress())
       ).to.equal(0);
+    });
+
+    it("records the agent receipt when the carrier marks delivery, then releases escrow on receiver confirm", async function () {
+      const { chainTrack, sender, receiver, agent, deliveryCode } = await loadFixture(bookShipmentFixture);
+      const receiptHash = ethers.keccak256(ethers.toUtf8Bytes("POD agent v1"));
+
+      await chainTrack.connect(agent).logCheckpoint(1, "Nairobi Hub", 1);
+      await chainTrack.connect(agent).logCheckpoint(1, "Destination", 2);
+      await chainTrack.connect(agent).logCheckpoint(1, "Recipient door", 3); // Delivered
+
+      await expect(
+        chainTrack.connect(agent).recordReceipt(1, receiptHash)
+      ).to.emit(chainTrack, "ReceiptRecorded");
+
+      // First hash wins; the receiver's confirm must not overwrite it.
+      const otherHash = ethers.keccak256(ethers.toUtf8Bytes("other"));
+      await expect(
+        chainTrack.connect(receiver).confirmDelivery(1, deliveryCode, otherHash)
+      ).to.emit(chainTrack, "EscrowReleased");
+
+      expect(await chainTrack.getReceiptHash(1)).to.equal(receiptHash);
+      expect((await chainTrack.getTransaction(1)).status).to.equal(2); // Paid
+      expect((await ethers.provider.getBalance(sender.address))).to.be.gt(0);
     });
 
     it("lets the sender cancel and be refunded before pickup", async function () {

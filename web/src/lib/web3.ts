@@ -147,11 +147,19 @@ export const chainGetUserByAddress = async (address: string): Promise<ChainUser>
   const { contract } = await getChainTrack();
   const id = Number(await contract.methods.userIdByAddress(address).call());
   if (id === 0) throw new Error("Address not registered on-chain");
-  const user: [string, string, string, string, number, boolean] = await contract.methods
+  return chainGetUserById(id, contract);
+};
+
+export const chainGetUserById = async (
+  id: number,
+  contract?: Contract<ContractAbi>
+): Promise<ChainUser> => {
+  const { contract: c } = contract ? { contract } : await getChainTrack();
+  const user: [string, string, string, string, number, boolean] = await c.methods
     .users(id)
     .call();
   const role = (Object.keys(ROLE_NUM) as Role[]).find((k) => ROLE_NUM[k] === user[4]);
-  return { id, name: user[2], phone: user[3], role: role ?? "NONE" };
+  return { id: Number(user[1]), name: user[2], phone: user[3], role: role ?? "NONE" };
 };
 
 export const chainGetPackageByCode = async (code: string): Promise<Package | null> => {
@@ -293,13 +301,34 @@ export const chainLogCheckpoint = async (args: {
 export const chainConfirmDelivery = async (args: {
   packageId: number;
   deliveryCode: string;
+  receiptHash: string;
 }): Promise<string> => {
   const { contract } = await getChainTrack();
   const from = await getActiveAccount();
   const tx = await contract.methods
-    .confirmDelivery(args.packageId, args.deliveryCode)
+    .confirmDelivery(args.packageId, args.deliveryCode, args.receiptHash)
     .send({ from });
   return tx.transactionHash;
+};
+
+export const chainRecordReceipt = async (args: {
+  packageId: number;
+  receiptHash: string;
+}): Promise<string> => {
+  const { contract } = await getChainTrack();
+  const from = await getActiveAccount();
+  const tx = await contract.methods
+    .recordReceipt(args.packageId, args.receiptHash)
+    .send({ from });
+  return tx.transactionHash;
+};
+
+export const chainGetReceiptHash = async (
+  packageId: number
+): Promise<string | null> => {
+  const { contract } = await getChainTrack();
+  const hash = String(await contract.methods.getReceiptHash(packageId).call());
+  return /^0x0+$/.test(hash) ? null : hash;
 };
 
 export const chainCancelShipment = async (packageId: number): Promise<string> => {

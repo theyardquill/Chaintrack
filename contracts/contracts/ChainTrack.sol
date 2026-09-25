@@ -21,6 +21,7 @@ contract ChainTrack {
     event CheckpointLogged(uint256 indexed checkpointId, uint256 indexed packageId, string location, PackageStatus status);
     event DeliveryConfirmed(uint256 indexed packageId, uint256 indexed confirmedBy);
     event EscrowReleased(uint256 indexed txnId, uint256 indexed packageId, address indexed payee, uint256 amount);
+    event ReceiptRecorded(uint256 indexed packageId, uint256 indexed recordedBy, bytes32 receiptHash);
 
     enum Role {
         NONE,
@@ -104,6 +105,10 @@ contract ChainTrack {
     mapping(uint256 => uint256[]) private packageCheckpoints;
     // Enabled on-chain tracking by QR code without a full index.
     mapping(string => uint256) public packageIdByCode;
+    // Immutable proof-of-delivery receipt: packageId => keccak256 of the
+    // canonical receipt payload. The hash is recorded exactly once and can be
+    // recomputed by anyone from the receipt document to verify authenticity.
+    mapping(uint256 => bytes32) public receiptHashes;
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");
@@ -212,7 +217,7 @@ contract ChainTrack {
         emit CheckpointLogged(checkpointCtr, _packageId, _location, _status);
     }
 
-    function confirmDelivery(uint256 _packageId, string memory _deliveryCode)
+    function confirmDelivery(uint256 _packageId, string memory _deliveryCode, bytes32 _receiptHash)
         public
         onlyRole(Role.RECEIVER)
     {
@@ -221,11 +226,20 @@ contract ChainTrack {
         require(packages[_packageId].receiverId == receiverId, "Not the recipient");
 
         Package storage p = packages[_packageId];
-        require(p.status == PackageStatus.OutForDelivery, "Not out for delivery");
+        require(
+            p.status == PackageStatus.OutForDelivery || p.status == PackageStatus.Delivered,
+            "Not out for delivery"
+        );
         require(
             keccak256(abi.encodePacked(_deliveryCode)) == p.deliveryCodeHash,
             "Invalid delivery code"
         );
+        // The agent may have recorded the receipt when they marked the package
+        // Delivered; this confirmation takes the first hash and never overwrites.
+        if (receiptHashes[_packageId] == 0) {
+            receiptHashes[_packageId] = _receiptHash;
+            emit ReceiptRecorded(_packageId, receiverId, _receiptHash);
+        }
 
         p.status = PackageStatus.Delivered;
         p.deliveredAt = block.timestamp;
@@ -256,6 +270,22 @@ contract ChainTrack {
 
         (bool ok, ) = payable(msg.sender).call{value: txn.amount}("");
         require(ok, "Refund failed");
+    }
+
+    /// @notice Persists the proof-of-delivery receipt hash for a Delivered
+    ///         package. Used by agents who mark delivery themselves (carrier
+    ///         flow); receiver confirmations record the hash atomically.
+    function recordReceipt(uint256 _packageId, bytes32 _receiptHash)
+        public
+        onlyRole(Role.AGENT)
+    {
+        require(_packageId >= 1 && _packageId <= packageCtr, "Invalid package");
+        require(packages[_packageId].status == PackageStatus.Delivered, "Not delivered yet");
+        require(receiptHashes[_packageId] == 0, "Receipt already recorded");
+
+        uint256 agentId = userIdByAddress[msg.sender];
+        receiptHashes[_packageId] = _receiptHash;
+        emit ReceiptRecorded(_packageId, agentId, _receiptHash);
     }
 
     function getPackage(uint256 _packageId)
@@ -326,5 +356,10 @@ contract ChainTrack {
             result[i] = checkpoints[packageCheckpoints[_packageId][i]];
         }
         return result;
+    }
+
+    function getReceiptHash(uint256 _packageId) public view returns (bytes32) {
+        require(_packageId >= 1 && _packageId <= packageCtr, "Invalid package");
+        return receiptHashes[_packageId];
     }
 }
