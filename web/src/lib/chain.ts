@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import type { ChainTrackState, Checkpoint, Package, Role, Transaction, User } from "./types";
 import {
+  bindWallet as bindWalletInDemo,
   bookShipment as bookInDemo,
   cancelShipment as cancelInDemo,
   confirmDelivery as confirmInDemo,
@@ -36,10 +37,10 @@ export function useChainTrack() {
   }, []);
 
   const book = useCallback(
-    (input: BookShipmentInput): number => {
-      const { state: next, packageId } = bookInDemo(state, input);
+    (input: BookShipmentInput): Package | null => {
+      const { state: next } = bookInDemo(state, input);
       update(next);
-      return packageId;
+      return next.packages.find((p) => p.qrHash === input.qrHash) ?? null;
     },
     [state, update]
   );
@@ -81,6 +82,13 @@ export function useChainTrack() {
     setState(resetDemo());
   }, []);
 
+  const bindWallet = useCallback(
+    (userId: number, wallet: string) => {
+      update(bindWalletInDemo(state, userId, wallet));
+    },
+    [state, update]
+  );
+
   const connectWallet = useCallback(async () => {
     try {
       const { getActiveAccount } = await import("./web3");
@@ -103,6 +111,7 @@ export function useChainTrack() {
     cancel,
     register,
     reset,
+    bindWallet,
   };
 }
 

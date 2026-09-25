@@ -17,7 +17,10 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatusBadge } from "@/components/status-badge";
+import { ChainStatus } from "@/components/chain-status";
 import { useChainTrack, useStoreState } from "@/lib/chain";
+import { useChainContract } from "@/lib/use-chain-contract";
+import { chainGetUserByAddress } from "@/lib/web3";
 import { loadSession } from "@/lib/auth";
 import { STATUS_LABEL, type PackageStatus } from "@/lib/types";
 import { fmtDate } from "@/lib/format";
@@ -48,6 +51,7 @@ export default function CheckpointPage() {
   }, [allowed, router]);
 
   const { state, track } = useChainTrack();
+  const chain = useChainContract();
   const { checkpointsForPackage } = useStoreState(state);
 
   const activePackages = state.packages.filter((p) => NEXT_STATUS[p.status].length > 0);
@@ -56,6 +60,9 @@ export default function CheckpointPage() {
   const [status, setStatus] = useState<PackageStatus>("InTransit");
   const [lastEvent, setLastEvent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recordOnChain, setRecordOnChain] = useState(false);
+  const [chainMsg, setChainMsg] = useState<string | null>(null);
+  const [chainErr, setChainErr] = useState<string | null>(null);
 
   const current = state.packages.find((p) => p.id === Number(packageId));
   const nextOptions = current ? NEXT_STATUS[current.status] : [];
@@ -83,6 +90,43 @@ export default function CheckpointPage() {
     track(location.trim(), status, Number(packageId), agentId);
     setLastEvent(`${current?.qrHash} → ${STATUS_LABEL[status]} at ${location.trim()}`);
     setLocation("");
+
+    setChainMsg(null);
+    setChainErr(null);
+    if (recordOnChain) {
+      void (async () => {
+        try {
+          const agent = loadSession();
+          const agentUser =
+            agent?.type === "user"
+              ? state.users.find((u) => u.id === agent.user.id)
+              : undefined;
+          if (!agentUser?.wallet) {
+            throw new Error(
+              "This agent has no on-chain wallet yet — register them in the admin console."
+            );
+          }
+          if (agentUser.wallet.toLowerCase() !== (chain.wallet ?? "").toLowerCase()) {
+            throw new Error("Connect this agent's wallet to log on-chain.");
+          }
+          const onChainAgent = await chainGetUserByAddress(agentUser.wallet);
+          const onChain = await chain.getByCode(current?.qrHash ?? "");
+          if (!onChain) {
+            throw new Error("This package was not booked on-chain.");
+          }
+          const tx = await chain.logCheckpoint({
+            packageId: onChain.id,
+            location: location.trim(),
+            status,
+          });
+          setChainMsg(
+            `Logged on-chain by agent #${onChainAgent.id} · tx ${tx}`
+          );
+        } catch (err) {
+          setChainErr(err instanceof Error ? err.message : String(err));
+        }
+      })();
+    }
   };
 
   return (
@@ -164,6 +208,44 @@ export default function CheckpointPage() {
             <AlertDescription>{lastEvent}</AlertDescription>
           </Alert>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Record on-chain</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <ChainStatus chain={chain} />
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <Input
+                type="checkbox"
+                checked={recordOnChain}
+                onChange={(e) => setRecordOnChain(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                Also write this checkpoint to the ChainTrack contract.
+                <span className="block text-xs text-muted-foreground">
+                  The connected wallet must match this agent&apos;s on-chain wallet, and the
+                  package must have been booked on-chain.
+                </span>
+              </span>
+            </label>
+            {chainMsg && (
+              <Alert>
+                <AlertTitle className="text-xs">On-chain checkpoint logged</AlertTitle>
+                <AlertDescription className="font-mono break-all text-xs">
+                  {chainMsg}
+                </AlertDescription>
+              </Alert>
+            )}
+            {chainErr && (
+              <Alert variant="default" className="py-3">
+                <AlertTitle className="text-xs">On-chain logging failed</AlertTitle>
+                <AlertDescription className="text-xs">{chainErr}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
 
         <Button type="submit" size="lg" className="w-full">
           <Scan /> Log checkpoint event

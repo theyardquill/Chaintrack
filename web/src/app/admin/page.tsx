@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, RefreshCcw, UserPlus, Wallet } from "lucide-react";
+import { BookOpen, Lock, RefreshCcw, UserPlus, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ChainStatus } from "@/components/chain-status";
 import {
   Select,
   SelectContent,
@@ -18,8 +20,9 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import { useChainTrack, useStoreState } from "@/lib/chain";
+import { useChainContract } from "@/lib/use-chain-contract";
 import { loadSession } from "@/lib/auth";
-import { TXN_LABEL, type Role } from "@/lib/types";
+import { TXN_LABEL, type Role, type User } from "@/lib/types";
 import { fmtAmount, fmtDate } from "@/lib/format";
 
 const ROLE_BADGE: Record<Role, string> = {
@@ -56,12 +59,35 @@ export default function AdminPage() {
 }
 
 function AdminShell() {
-  const { state, register, reset } = useChainTrack();
+  const { state, register, reset, bindWallet } = useChainTrack();
+  const chain = useChainContract();
   const { userById } = useStoreState(state);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<Role>("SENDER");
+  const [addrByUser, setAddrByUser] = useState<Record<number, string>>({});
+  const [regMsg, setRegMsg] = useState<string | null>(null);
+  const [regErr, setRegErr] = useState<string | null>(null);
+
+  const registerOnChain = async (u: User) => {
+    setRegMsg(null);
+    setRegErr(null);
+    try {
+      const address = addrByUser[u.id]?.trim() || chain.wallet || "";
+      if (!address) throw new Error("Enter or connect the wallet address for this user.");
+      const tx = await chain.registerUser({
+        address,
+        name: u.name,
+        phone: u.phone,
+        role: u.role,
+      });
+      bindWallet(u.id, address);
+      setRegMsg(`Registered ${u.name} (${u.role}) on-chain · tx ${tx}`);
+    } catch (err) {
+      setRegErr(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const totalEscrow = state.transactions
     .filter((t) => t.status === "InEscrow")
@@ -182,6 +208,83 @@ function AdminShell() {
               ))}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">On-chain registry</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <ChainStatus chain={chain} />
+          {chain.owner && !chain.isOwner && (
+            <Alert variant="default" className="py-3">
+              <AlertDescription className="text-xs">
+                only the registry owner (<code className="font-mono">{chain.owner}</code>) can mint
+                on-chain identities. Connect that wallet to register participants.
+              </AlertDescription>
+            </Alert>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Registering participants in this table&apos;s order keeps on-chain IDs aligned with the
+            app registry, so escrow routes reference the correct sender and receiver. Each user
+            needs their own wallet: use their address here (defaults to the connected wallet).
+          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Wallet address</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {state.users.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell className="font-mono text-xs">{u.id}</TableCell>
+                  <TableCell className="font-medium">{u.name}</TableCell>
+                  <TableCell>
+                    <Badge className={ROLE_BADGE[u.role]}>{u.role}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={addrByUser[u.id] ?? chain.wallet ?? ""}
+                      onChange={(e) =>
+                        setAddrByUser((prev) => ({ ...prev, [u.id]: e.target.value }))
+                      }
+                      placeholder="0x…"
+                      className="h-8 font-mono text-xs"
+                    />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!chain.isOwner}
+                      onClick={() => void registerOnChain(u)}
+                    >
+                      <BookOpen className="h-3.5 w-3.5" /> Register
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {regMsg && (
+            <Alert>
+              <AlertTitle className="text-xs">Registered on-chain</AlertTitle>
+              <AlertDescription className="font-mono break-all text-xs">{regMsg}</AlertDescription>
+            </Alert>
+          )}
+          {regErr && (
+            <Alert variant="default" className="py-3">
+              <AlertTitle className="text-xs">On-chain registration failed</AlertTitle>
+              <AlertDescription className="text-xs">{regErr}</AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 

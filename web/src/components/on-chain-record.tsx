@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { TrackingTimeline } from "@/components/tracking-timeline";
+import { ChainStatus } from "@/components/chain-status";
 import { useChainContract } from "@/lib/use-chain-contract";
 import {
   chainConfirmDelivery,
@@ -95,7 +96,24 @@ export function OnChainRecord({ code }: OnChainRecordProps) {
   const shortAddress = (a: string | null) =>
     a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
 
-  if (chain.status !== "ready") return null;
+  if (chain.status !== "ready") {
+    return (
+      <Card className="border-primary/30">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Link2 className="h-4 w-4 text-primary" /> On-chain record
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <ChainStatus chain={chain} />
+          <p className="text-xs text-muted-foreground">
+            Connect a wallet to read this package&apos;s on-chain escrow status, checkpoints and
+            transactions.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const escrowAmount =
     txn && txn.currency === "ETH"

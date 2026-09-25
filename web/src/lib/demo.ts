@@ -288,3 +288,14 @@ export function registerUser(
     userId: id,
   };
 }
+
+export function bindWallet(
+  state: ChainTrackState,
+  userId: number,
+  wallet: string
+): ChainTrackState {
+  return {
+    ...state,
+    users: state.users.map((u) => (u.id === userId ? { ...u, wallet } : u)),
+  };
+}

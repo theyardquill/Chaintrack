@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ChainStatus } from "@/components/chain-status";
 import {
   Select,
   SelectContent,
@@ -16,6 +17,8 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PackageCard } from "@/components/package-card";
 import { useChainTrack, useStoreState } from "@/lib/chain";
+import { useChainContract } from "@/lib/use-chain-contract";
+import { chainGetUserByAddress } from "@/lib/web3";
 import type { Package } from "@/lib/types";
 
 const SIZES = ["S", "M", "L", "XL"];
@@ -23,6 +26,7 @@ const CURRENCIES = ["ETH", "BTC", "USDT", "KES"];
 
 export default function ShipPage() {
   const { state, book } = useChainTrack();
+  const chain = useChainContract();
   const { userById } = useStoreState(state);
 
   const senders = state.users.filter((u) => u.role === "SENDER");
@@ -39,6 +43,9 @@ export default function ShipPage() {
   const [error, setError] = useState<string | null>(null);
   const [booked, setBooked] = useState<Package | null>(null);
   const [copied, setCopied] = useState(false);
+  const [recordOnChain, setRecordOnChain] = useState(false);
+  const [chainMsg, setChainMsg] = useState<string | null>(null);
+  const [chainErr, setChainErr] = useState<string | null>(null);
 
   const qrHash = useMemo(
     () => `CTK-${String(state.packages.length + 1).padStart(4, "0")}`,
@@ -68,7 +75,7 @@ export default function ShipPage() {
       return;
     }
 
-    const packageId = book({
+    const created = book({
       qrHash,
       content,
       weight: Number(weight),
@@ -80,12 +87,54 @@ export default function ShipPage() {
       deliveryCode,
     });
 
-    const created = state.packages.find(
-      (p) => p.qrHash === qrHash || p.id === packageId
-    );
-    setBooked(created ?? null);
+    setBooked(created);
     setContent("");
     setDeliveryCode("");
+
+    setChainMsg(null);
+    setChainErr(null);
+    if (recordOnChain) {
+      void (async () => {
+        try {
+          if (currency !== "ETH") {
+            throw new Error("On-chain escrow currently records in ETH only.");
+          }
+          const snd = userById(sender);
+          if (!snd?.wallet) {
+            throw new Error(
+              "The sender has no on-chain wallet yet — register them in the admin console."
+            );
+          }
+          if (snd.wallet.toLowerCase() !== (chain.wallet ?? "").toLowerCase()) {
+            throw new Error("Connect the sender's wallet to record on-chain.");
+          }
+          const recv = userById(receiver);
+          if (!recv?.wallet) {
+            throw new Error(
+              "The receiver has no on-chain wallet yet — register them in the admin console."
+            );
+          }
+          const onChainReceiver = await chainGetUserByAddress(recv.wallet);
+          const hash = await chain.bookShipment(
+            {
+              qrHash,
+              contentHash: content,
+              weight: Number(weight),
+              size,
+              receiverId: onChainReceiver.id,
+              deliveryCode,
+              currency: "ETH",
+            },
+            String(amount)
+          );
+          setChainMsg(
+            `Booked on-chain · package #${hash.packageId} · tx ${hash.txHash}`
+          );
+        } catch (err) {
+          setChainErr(err instanceof Error ? err.message : String(err));
+        }
+      })();
+    }
   };
 
   const copyLink = () => {
@@ -224,6 +273,49 @@ export default function ShipPage() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Record on-chain</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <ChainStatus chain={chain} />
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <Input
+                type="checkbox"
+                checked={recordOnChain}
+                onChange={(e) => setRecordOnChain(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                Also book this shipment on the ChainTrack contract as ETH escrow.
+                <span className="block text-xs text-muted-foreground">
+                  The sender&apos;s wallet must be connected and both parties must be registered
+                  on-chain (register them in the admin console).
+                </span>
+              </span>
+            </label>
+            {recordOnChain && currency !== "ETH" && (
+              <p className="text-xs text-amber-600">
+                Switch the escrow currency to ETH to record on-chain.
+              </p>
+            )}
+            {chainMsg && (
+              <Alert>
+                <AlertTitle className="text-xs">On-chain booking confirmed</AlertTitle>
+                <AlertDescription className="font-mono break-all text-xs">
+                  {chainMsg}
+                </AlertDescription>
+              </Alert>
+            )}
+            {chainErr && (
+              <Alert variant="default" className="py-3">
+                <AlertTitle className="text-xs">On-chain booking failed</AlertTitle>
+                <AlertDescription className="text-xs">{chainErr}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
 
         <Button type="submit" size="lg" className="w-full">
           <Send /> Book shipment & lock escrow
