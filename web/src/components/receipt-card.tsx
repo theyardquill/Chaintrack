@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, FileCheck2, Printer, ShieldAlert } from "lucide-react";
+import { CheckCircle2, FileCheck2, Printer, Share2, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,11 +56,18 @@ export function ReceiptCard({
         <CardTitle className="flex items-center gap-2 text-base">
           <FileCheck2 className="h-4 w-4 text-emerald-600" /> {RECEIPT_LABEL}
         </CardTitle>
-        <Link href={`/receipt/${pkg.id}`} className="print:hidden">
-          <Button size="sm" variant="outline">
-            <Printer className="mr-1.5 h-3.5 w-3.5" /> Print receipt
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2 print:hidden">
+          <Link href={`/report/${pkg.qrHash}`}>
+            <Button size="sm" variant="ghost">
+              <Share2 className="mr-1.5 h-3.5 w-3.5" /> Status report
+            </Button>
+          </Link>
+          <Link href={`/receipt/${pkg.id}`}>
+            <Button size="sm" variant="outline">
+              <Printer className="mr-1.5 h-3.5 w-3.5" /> Print receipt
+            </Button>
+          </Link>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">

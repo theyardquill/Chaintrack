@@ -215,6 +215,14 @@ async function main() {
   await clickByText("Connect wallet to unlock on-chain escrow");
   await sleep(2500);
   check("receipt page verifies against the contract", await has("Verified — on-chain hash matches this document"));
+  const repURL = await evalJS(`(()=>{const a=document.querySelector("a[href^='/report/']"); return a?a.getAttribute("href"):null;})()`);
+  check("status report link present", !!repURL, repURL ?? "none");
+  await goto(`${BASE}${repURL}`);
+  await sleep(1000);
+  check("status report renders", await has("Delivery status report"));
+  check("status report shows package details", await has("About this package"));
+  check("status report shows recipient", await has("To (receiver)"));
+  check("status report share action", await has("Copy share link"));
 
   // ---- 5. Agent "marking as delivered" flow: ship a second package, drive it
   //          to Delivered from the checkpoint console, assert the receipt card

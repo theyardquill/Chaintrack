@@ -1,8 +1,9 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, ScanSearch, Wallet } from "lucide-react";
+import { CheckCircle2, ScanSearch, Share2, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,13 @@ function TrackContent() {
       {pkg && (
         <>
           <PackageCard state={state} pkg={pkg} showQr />
+          <div className="flex items-center gap-2 print:hidden">
+            <Link href={`/report/${pkg.qrHash}`}>
+              <Button variant="outline" size="sm">
+                <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share status report
+              </Button>
+            </Link>
+          </div>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Route & escrow</CardTitle>
