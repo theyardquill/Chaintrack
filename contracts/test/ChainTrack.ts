@@ -104,7 +104,7 @@ describe("ChainTrack", function () {
             1,
             "S",
             2,
-            ethers.ZeroHash,
+            ethers.keccak256(ethers.toUtf8Bytes("DUP-CODE")),
             "ETH",
             { value: ethers.parseEther("0.01") }
           )
@@ -200,6 +200,93 @@ describe("ChainTrack", function () {
       expect(after).to.be.gt(before);
       expect((await chainTrack.packages(1)).status).to.equal(5); // Cancelled
       expect((await chainTrack.getTransaction(1)).status).to.equal(3); // Refunded
+    });
+  });
+
+  describe("input validation", function () {
+    const code = "CTK-VALIDATE";
+    const contentHash = ethers.keccak256(ethers.toUtf8Bytes("goods"));
+    const deliveryCodeHash = ethers.keccak256(ethers.toUtf8Bytes("CLOUD-77"));
+
+    it("rejects bookings with an empty QR code", async function () {
+      const { chainTrack, sender } = await loadFixture(deployFixture);
+      await expect(
+        chainTrack.connect(sender).bookShipment(
+          "",
+          contentHash,
+          2,
+          "M",
+          2,
+          deliveryCodeHash,
+          "ETH",
+          { value: ethers.parseEther("0.1") }
+        )
+      ).to.be.revertedWith("Invalid QR");
+    });
+
+    it("rejects bookings with an over-long QR code", async function () {
+      const { chainTrack, sender } = await loadFixture(deployFixture);
+      await expect(
+        chainTrack.connect(sender).bookShipment(
+          "C".repeat(65),
+          contentHash,
+          2,
+          "M",
+          2,
+          deliveryCodeHash,
+          "ETH",
+          { value: ethers.parseEther("0.1") }
+        )
+      ).to.be.revertedWith("Invalid QR");
+    });
+
+    it("rejects bookings with an empty delivery code hash (stuck escrow)", async function () {
+      const { chainTrack, sender } = await loadFixture(deployFixture);
+      await expect(
+        chainTrack.connect(sender).bookShipment(
+          code,
+          contentHash,
+          2,
+          "M",
+          2,
+          ethers.ZeroHash,
+          "ETH",
+          { value: ethers.parseEther("0.1") }
+        )
+      ).to.be.revertedWith("Delivery code required");
+    });
+
+    it("rejects bookings with an empty package size", async function () {
+      const { chainTrack, sender } = await loadFixture(deployFixture);
+      await expect(
+        chainTrack.connect(sender).bookShipment(
+          code,
+          contentHash,
+          2,
+          "",
+          2,
+          deliveryCodeHash,
+          "ETH",
+          { value: ethers.parseEther("0.1") }
+        )
+      ).to.be.revertedWith("Invalid size");
+    });
+
+    it("rejects checkpoints with an empty location", async function () {
+      const { chainTrack, sender, agent } = await loadFixture(deployFixture);
+      await chainTrack.connect(sender).bookShipment(
+        code,
+        contentHash,
+        2,
+        "M",
+        2,
+        deliveryCodeHash,
+        "ETH",
+        { value: ethers.parseEther("0.1") }
+      );
+      await expect(
+        chainTrack.connect(agent).logCheckpoint(1, "", 1)
+      ).to.be.revertedWith("Invalid location");
     });
   });
 });

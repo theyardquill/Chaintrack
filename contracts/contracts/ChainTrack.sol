@@ -130,6 +130,8 @@ contract ChainTrack {
         onlyOwner
     {
         require(_address != address(0), "Invalid address");
+        require(bytes(_name).length > 0 && bytes(_name).length <= 64, "Invalid name");
+        require(bytes(_phone).length <= 32, "Phone too long");
         require(_role != Role.NONE, "Invalid role");
         require(userIdByAddress[_address] == 0, "Already registered");
 
@@ -150,6 +152,11 @@ contract ChainTrack {
     ) public payable onlyRole(Role.SENDER) returns (uint256) {
         require(_receiverId >= 1 && _receiverId <= userCtr, "Invalid receiver");
         require(users[_receiverId].role == Role.RECEIVER, "Receiver must be a RECEIVER");
+        require(bytes(_qrHash).length > 0 && bytes(_qrHash).length <= 64, "Invalid QR");
+        require(bytes(_contentHash).length <= 256, "Content hash too long");
+        require(bytes(_size).length > 0 && bytes(_size).length <= 16, "Invalid size");
+        require(bytes(_currency).length > 0 && bytes(_currency).length <= 8, "Invalid currency");
+        require(_deliveryCodeHash != bytes32(0), "Delivery code required");
         require(msg.value > 0, "Escrow amount must be > 0");
 
         uint256 senderId = userIdByAddress[msg.sender];
@@ -195,6 +202,7 @@ contract ChainTrack {
         onlyRole(Role.AGENT)
     {
         require(_packageId >= 1 && _packageId <= packageCtr, "Invalid package");
+        require(bytes(_location).length > 0 && bytes(_location).length <= 256, "Invalid location");
         Package storage p = packages[_packageId];
         require(p.status != PackageStatus.Delivered, "Already delivered");
         require(p.status != PackageStatus.Cancelled, "Cancelled");
