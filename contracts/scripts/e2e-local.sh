@@ -58,7 +58,9 @@ log "2/6  seeding ChainTrack (deploy + wallets + users + seed package)"
 pnpm --filter contracts seed
 
 log "3/6  building web app with seeded deployment address"
-pnpm --filter web build
+# Force the localStorage demo auth so the E2E flow is deterministic (Clerk's
+# real sign-in is exercised manually; see web/.env.local NEXT_PUBLIC_AUTH_PROVIDER).
+NEXT_PUBLIC_AUTH_PROVIDER=demo pnpm --filter web build
 
 log "4/6  serving web app on :$WEB_PORT and CORS proxy on :$PROXY_PORT"
 setsid bash -c "cd web && PORT=$WEB_PORT pnpm start" > /tmp/ct-e2e-web.log 2>&1 &

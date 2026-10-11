@@ -23,3 +23,5 @@ coverage/
 # misc
 *.tsbuildinfo
 .DS_Store
+.vercel
+.env*

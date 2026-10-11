@@ -19,9 +19,66 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserButton, useAuth as useClerkAuth } from "@clerk/nextjs";
 import { useChainTrack } from "@/lib/chain";
 import { useAuth } from "@/lib/use-auth";
 import { cn } from "cn";
+
+const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
+const SIGN_IN_HREF = clerkEnabled ? "/sign-in" : "/login";
+
+// Only mounted when Clerk is enabled, so ClerkProvider is guaranteed present.
+function ClerkAuthControls() {
+  const { isLoaded, isSignedIn } = useClerkAuth();
+  if (!isLoaded) return null;
+  if (isSignedIn) {
+    return (
+      <div className="hidden items-center gap-2 sm:flex">
+        <Link href="/account">
+          <Button variant="ghost" size="sm">
+            <Wallet /> Account
+          </Button>
+        </Link>
+        <UserButton />
+      </div>
+    );
+  }
+  return (
+    <Link href={SIGN_IN_HREF} className="hidden sm:inline-flex">
+      <Button variant="outline" size="sm">
+        <LogIn /> Sign in
+      </Button>
+    </Link>
+  );
+}
+
+function ClerkAuthMobile({ onNavigate }: { onNavigate: () => void }) {
+  const { isLoaded, isSignedIn } = useClerkAuth();
+  if (!isLoaded) return null;
+  if (isSignedIn) {
+    return (
+      <div className="space-y-1 px-3 py-2">
+        <UserButton showName />
+        <Link
+          href="/account"
+          onClick={onNavigate}
+          className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60"
+        >
+          <Wallet className="h-4 w-4" /> Account &amp; wallets
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <Link
+      href={SIGN_IN_HREF}
+      onClick={onNavigate}
+      className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60"
+    >
+      <LogIn className="h-4 w-4" /> Sign in
+    </Link>
+  );
+}
 
 const NAV = [
   { href: "/track", label: "Track", icon: ScanLine },
@@ -103,11 +160,13 @@ export function SiteHeader() {
 
         <div className="ml-auto flex items-center gap-2">
           <Badge variant="outline" className="hidden md:inline-flex">
-            Demo mode
+            {clerkEnabled ? "Clerk" : "Demo mode"}
           </Badge>
           <ThemeToggle />
 
-          {session ? (
+          {clerkEnabled ? (
+            <ClerkAuthControls />
+          ) : session ? (
             <div className="hidden items-center gap-2 sm:flex">
               {session.type === "admin" ? (
                 <Link href="/admin">
@@ -128,7 +187,7 @@ export function SiteHeader() {
               </Button>
             </div>
           ) : (
-            <Link href="/login" className="hidden sm:inline-flex">
+            <Link href={SIGN_IN_HREF} className="hidden sm:inline-flex">
               <Button variant="outline" size="sm">
                 <LogIn /> Sign in
               </Button>
@@ -162,7 +221,9 @@ export function SiteHeader() {
             <Separator className="my-2" />
 
             <div className="flex flex-col gap-1">
-              {session ? (
+              {clerkEnabled ? (
+                <ClerkAuthMobile onNavigate={() => setOpen(false)} />
+              ) : session ? (
                 <>
                   <Link
                     href={session.type === "admin" ? "/admin" : session.user.role === "AGENT" ? "/agent" : "/dashboard"}
@@ -183,20 +244,22 @@ export function SiteHeader() {
                 </>
               ) : (
                 <Link
-                  href="/login"
+                  href={SIGN_IN_HREF}
                   onClick={() => setOpen(false)}
                   className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60"
                 >
                   <LogIn className="h-4 w-4" /> Sign in
                 </Link>
               )}
-              <Link
-                href="/agent/login"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60"
-              >
-                <RadioTower className="h-4 w-4" /> Agent sign in
-              </Link>
+              {!clerkEnabled && (
+                <Link
+                  href="/agent/login"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60"
+                >
+                  <RadioTower className="h-4 w-4" /> Agent sign in
+                </Link>
+              )}
             </div>
 
             <Separator className="my-2" />

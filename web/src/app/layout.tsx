@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeSync } from "@/components/theme-sync";
+
+// Chosen at build time; see src/proxy.ts. "clerk" mounts the Clerk provider,
+// anything else keeps the localStorage demo auth.
+const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,7 +33,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Nonce set by src/proxy.ts for the style-src/script-src CSP directive; the
   // theme bootstrap below is the only app-authored inline script.
   const nonce = (await headers()).get("x-nonce") ?? undefined;
-  return (
+  const tree = (
     <html
       lang="en"
       suppressHydrationWarning
@@ -52,4 +57,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </body>
     </html>
   );
+
+  return clerkEnabled ? <ClerkProvider dynamic>{tree}</ClerkProvider> : tree;
 }
