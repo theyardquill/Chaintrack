@@ -33,6 +33,15 @@ export const AddressSchema = z
   .regex(/^0x[a-fA-F0-9]{40}$/, "invalid EVM address")
   .transform((v) => v.toLowerCase());
 
+// Reference to the on-chain counterpart of a mirrored row.
+export const ChainMetaSchema = z.object({
+  chainId: z.string().min(1),
+  contract: AddressSchema,
+  onChainId: z.number().int(),
+  txHash: z.string().optional(),
+});
+export type ChainMeta = z.infer<typeof ChainMetaSchema>;
+
 // ---------------------------------------------------------------------------
 // Wallet linkage — the join between an account (Clerk user / Mongo account)
 // and one or more on-chain wallets proven via EIP-4361 (SIWE).

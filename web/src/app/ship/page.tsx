@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PackageCard } from "@/components/package-card";
+import { AccountShip } from "@/components/account-ship";
 import { useChainTrack, useStoreState } from "@/lib/chain";
 import { useChainContract } from "@/lib/use-chain-contract";
 import { chainGetUserByAddress } from "@/lib/web3";
@@ -23,8 +24,13 @@ import type { Package } from "@/lib/types";
 
 const SIZES = ["S", "M", "L", "XL"];
 const CURRENCIES = ["ETH", "BTC", "USDT", "KES"];
+const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
 
 export default function ShipPage() {
+  return clerkEnabled ? <AccountShip /> : <DemoShip />;
+}
+
+function DemoShip() {
   const { state, book } = useChainTrack();
   const chain = useChainContract();
   const { userById } = useStoreState(state);
