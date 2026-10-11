@@ -2,6 +2,7 @@ import type { Collection } from "mongodb";
 import { getDb } from "./mongo";
 import type {
   CheckpointDoc,
+  Counter,
   PackageDoc,
   SiweNonce,
   TransactionDoc,
@@ -14,6 +15,7 @@ export interface Collections {
   transactions: Collection<TransactionDoc>;
   checkpoints: Collection<CheckpointDoc>;
   siweNonces: Collection<SiweNonce>;
+  counters: Collection<Counter>;
 }
 
 let indexPromise: Promise<void> | null = null;
@@ -41,6 +43,7 @@ export async function getCollections(): Promise<Collections> {
     transactions: db.collection("transactions") as Collection<TransactionDoc>,
     checkpoints: db.collection("checkpoints") as Collection<CheckpointDoc>,
     siweNonces: db.collection("siwe_nonces") as Collection<SiweNonce>,
+    counters: db.collection("counters") as Collection<Counter>,
   };
   if (!indexPromise) indexPromise = ensureIndexes(cols);
   await indexPromise;

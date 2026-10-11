@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { WalletLinkCard } from "@/components/wallet-link";
+import { AccountRoleCard } from "@/components/account-role";
 
 const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
 
@@ -52,6 +53,7 @@ function AccountInner() {
         </CardContent>
       </Card>
 
+      <AccountRoleCard />
       <WalletLinkCard />
     </div>
   );

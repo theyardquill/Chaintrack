@@ -23,11 +23,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatusBadge, TxnBadge } from "@/components/status-badge";
+import { AccountDashboard } from "@/components/account-dashboard";
 import { useChainTrack, useStoreState } from "@/lib/chain";
 import { loadSession } from "@/lib/auth";
 import { fmtAmount, fmtDate } from "@/lib/format";
 
+const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
+
 export default function UserDashboardPage() {
+  return clerkEnabled ? <AccountDashboard /> : <DemoDashboard />;
+}
+
+function DemoDashboard() {
   const router = useRouter();
   const [me] = useState(() => {
     if (typeof window === "undefined") return null;

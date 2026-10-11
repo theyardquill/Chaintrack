@@ -59,6 +59,9 @@ export type WalletLink = z.infer<typeof WalletLinkSchema>;
 export const UserDocSchema = z.object({
   _id: z.string(),
   clerkId: z.string().nullable().default(null),
+  // Numeric id used by off-chain packages/transactions/checkpoints and, once
+  // registered, by the on-chain contract (package senderId/receiverId).
+  appUserId: z.number().int().nullable().default(null),
   name: z.string().max(64).default(""),
   phone: z.string().max(32).default(""),
   email: z.string().email().optional(),
@@ -69,6 +72,13 @@ export const UserDocSchema = z.object({
   updatedAt: Timestamp,
 });
 export type UserDoc = z.infer<typeof UserDocSchema>;
+
+// Auto-increment sequences (e.g. appUserId).
+export const CounterSchema = z.object({
+  _id: z.string(),
+  seq: z.number().int(),
+});
+export type Counter = z.infer<typeof CounterSchema>;
 
 // ---------------------------------------------------------------------------
 // Package — mirrors the demo `Package` type plus optional on-chain + geo
