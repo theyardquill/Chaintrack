@@ -20,6 +20,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { ChainStatus } from "@/components/chain-status";
 import { ReceiptCard } from "@/components/receipt-card";
 import { LocationPicker } from "@/components/location-picker";
+import { AccountCheckpoint } from "@/components/account-checkpoint";
 import { useChainTrack, useStoreState } from "@/lib/chain";
 import { useChainContract } from "@/lib/use-chain-contract";
 import { chainGetUserByAddress } from "@/lib/web3";
@@ -37,7 +38,13 @@ const NEXT_STATUS: Record<PackageStatus, PackageStatus[]> = {
   Cancelled: [],
 };
 
+const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
+
 export default function CheckpointPage() {
+  return clerkEnabled ? <AccountCheckpoint /> : <DemoCheckpoint />;
+}
+
+function DemoCheckpoint() {
   const router = useRouter();
   const [allowed] = useState(() => {
     if (typeof window === "undefined") return false;

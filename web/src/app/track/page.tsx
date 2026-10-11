@@ -12,10 +12,13 @@ import { PackageCard } from "@/components/package-card";
 import { TrackingTimeline } from "@/components/tracking-timeline";
 import { OnChainRecord } from "@/components/on-chain-record";
 import { CheckpointMap } from "@/components/checkpoint-map";
+import { AccountTrack } from "@/components/account-track";
 import { useChainTrack, useStoreState } from "@/lib/chain";
 import { resolveCoords } from "@/lib/geo";
 import { TXN_LABEL } from "@/lib/types";
 import { fmtAmount } from "@/lib/format";
+
+const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
 
 function TrackContent() {
   const params = useSearchParams();
@@ -170,9 +173,5 @@ function TrackContent() {
 }
 
 export default function TrackPage() {
-  return (
-    <Suspense>
-      <TrackContent />
-    </Suspense>
-  );
+  return <Suspense>{clerkEnabled ? <AccountTrack /> : <TrackContent />}</Suspense>;
 }

@@ -332,3 +332,47 @@ export async function confirmDelivery(
   return { pkg: updated ?? pkg, txn };
 }
 
+export interface PackageDetail {
+  pkg: PackageDoc;
+  txn: TransactionDoc | null;
+  checkpoints: CheckpointDoc[];
+  people: { id: number; name: string; role: Role }[];
+}
+
+// Public lookup by tracking code — returns no secrets (delivery code is stripped
+// by the caller before serialising).
+export async function getPackageByCode(code: string): Promise<PackageDetail | null> {
+  const { packages, transactions, checkpoints, users } = await getCollections();
+  const pkg = await packages.findOne({ qrHash: code });
+  if (!pkg) return null;
+
+  const txn = await transactions.findOne({ packageId: pkg._id });
+  const cps = await checkpoints.find({ packageId: pkg._id }).sort({ timestamp: 1 }).toArray();
+
+  const ids = new Set<number>([pkg.senderId, pkg.receiverId]);
+  if (pkg.activeAgentId != null) ids.add(pkg.activeAgentId);
+  const people = await users.find({ appUserId: { $in: [...ids] } }).toArray();
+
+  return {
+    pkg,
+    txn,
+    checkpoints: cps,
+    people: people.map((u) => ({ id: u.appUserId ?? -1, name: u.name, role: u.role })),
+  };
+}
+
+export async function listActivePackages(): Promise<PackageDoc[]> {
+  const { packages } = await getCollections();
+  return packages
+    .find({ status: { $nin: ["Delivered", "Cancelled", "Failed"] } })
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .toArray();
+}
+
+export function redactPackage(pkg: PackageDoc): Omit<PackageDoc, "deliveryCode"> {
+  const clone: Partial<PackageDoc> = { ...pkg };
+  delete clone.deliveryCode;
+  return clone as Omit<PackageDoc, "deliveryCode">;
+}
+

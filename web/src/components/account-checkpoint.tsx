@@ -1,0 +1,257 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { RadioTower, Scan } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ChainStatus } from "@/components/chain-status";
+import { LocationPicker } from "@/components/location-picker";
+import { useChainContract } from "@/lib/use-chain-contract";
+import { STATUS_LABEL, type PackageStatus, type Role } from "@/lib/types";
+
+const NEXT_STATUS: Record<PackageStatus, PackageStatus[]> = {
+  Registered: ["InTransit"],
+  InTransit: ["OutForDelivery"],
+  OutForDelivery: ["Delivered"],
+  Delivered: [],
+  Failed: [],
+  Cancelled: [],
+};
+
+interface ActivePackage {
+  _id: number;
+  qrHash: string;
+  status: PackageStatus;
+  chain?: { chainId: string; contract: string; onChainId: number; txHash?: string };
+}
+
+export function AccountCheckpoint() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const chain = useChainContract();
+
+  const [role, setRole] = useState<Role | null>(null);
+  const [myWallet, setMyWallet] = useState<string | null>(null);
+  const [packages, setPackages] = useState<ActivePackage[]>([]);
+  const [packageId, setPackageId] = useState("");
+  const [location, setLocation] = useState("");
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [status, setStatus] = useState<PackageStatus>("InTransit");
+  const [busy, setBusy] = useState(false);
+  const [lastEvent, setLastEvent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let active = true;
+    void (async () => {
+      try {
+        const [meRes, pkgRes] = await Promise.all([
+          fetch("/api/auth/me", { cache: "no-store" }),
+          fetch("/api/packages?scope=active", { cache: "no-store" }),
+        ]);
+        const meBody = (await meRes.json().catch(() => ({}))) as {
+          user?: { role: Role; wallets: { address: string; isPrimary: boolean }[] };
+        };
+        const pkgBody = (await pkgRes.json().catch(() => ({}))) as { packages?: ActivePackage[] };
+        if (!active) return;
+        setRole(meBody.user?.role ?? null);
+        setMyWallet(
+          meBody.user?.wallets.find((w) => w.isPrimary)?.address ??
+            meBody.user?.wallets[0]?.address ??
+            null,
+        );
+        setPackages(pkgBody.packages ?? []);
+        if (pkgBody.packages?.[0]) setPackageId(String(pkgBody.packages[0]._id));
+      } catch {
+        if (active) setError("could not load packages");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isSignedIn]);
+
+  const current = packages.find((p) => p._id === Number(packageId));
+  const nextOptions = current ? NEXT_STATUS[current.status] : [];
+
+  if (!isLoaded) {
+    return <div className="py-20 text-center text-sm text-muted-foreground">Loading…</div>;
+  }
+  if (!isSignedIn) {
+    return <div className="py-20 text-center text-sm text-muted-foreground">Please sign in.</div>;
+  }
+  if (role && role !== "AGENT") {
+    return (
+      <div className="mx-auto max-w-2xl space-y-4 py-20 text-center text-sm text-muted-foreground">
+        <p>Only agents can log checkpoints. Set your role on the account page.</p>
+        <Link href="/account" className="text-primary hover:underline">
+          Go to account
+        </Link>
+      </div>
+    );
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      if (!current) throw new Error("pick a package");
+      if (!location.trim()) throw new Error("enter the checkpoint location");
+
+      let chainMeta: ActivePackage["chain"];
+      if (current.chain?.onChainId) {
+        if (!myWallet) throw new Error("link a wallet on your account page first");
+        if (!chain.connection) throw new Error("connect your wallet first");
+        if ((chain.wallet ?? "").toLowerCase() !== myWallet.toLowerCase()) {
+          throw new Error("connect the wallet linked to your account");
+        }
+        const txHash = await chain.logCheckpoint({
+          packageId: current.chain.onChainId,
+          location: location.trim(),
+          status,
+        });
+        chainMeta = { ...current.chain, txHash };
+      }
+
+      const res = await fetch(
+        `/api/packages/${encodeURIComponent(current.qrHash)}/checkpoints`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            location: location.trim(),
+            status,
+            chain: chainMeta,
+            lat: coords?.lat,
+            lng: coords?.lng,
+          }),
+        },
+      );
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? "checkpoint failed");
+
+      setLastEvent(`${current.qrHash} → ${STATUS_LABEL[status]} at ${location.trim()}`);
+      setLocation("");
+      setCoords(null);
+      setPackages((prev) =>
+        prev.map((p) => (p._id === current._id ? { ...p, status } : p)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Agent checkpoint console</h1>
+        <p className="text-sm text-muted-foreground">
+          Log a package&apos;s location and status. Each event is written on-chain and mirrored to
+          your account.
+        </p>
+      </div>
+
+      <form onSubmit={submit} className="space-y-4">
+        <div className="space-y-2">
+          <Label>Package</Label>
+          <Select
+            value={packageId}
+            onValueChange={(v) => {
+              setPackageId(v ?? "");
+              const next = packages.find((p) => p._id === Number(v));
+              const opts = next ? NEXT_STATUS[next.status] : [];
+              if (opts[0]) setStatus(opts[0]);
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select an in-transit package" />
+            </SelectTrigger>
+            <SelectContent>
+              {packages.map((p) => (
+                <SelectItem key={p._id} value={String(p._id)}>
+                  {p.qrHash} · {STATUS_LABEL[p.status]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Location</Label>
+          <Input
+            placeholder="e.g. JKIA Cargo Terminal"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+          />
+          <LocationPicker coords={coords} onCoords={setCoords} onName={setLocation} />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Next status</Label>
+          <Select
+            value={status}
+            onValueChange={(v) => setStatus(v as PackageStatus)}
+            disabled={nextOptions.length === 0}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {nextOptions.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {error && (
+          <Alert variant="default">
+            <AlertTitle>Cannot log</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {lastEvent && (
+          <Alert>
+            <RadioTower className="h-4 w-4" />
+            <AlertTitle>Checkpoint logged</AlertTitle>
+            <AlertDescription>{lastEvent}</AlertDescription>
+          </Alert>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Wallet &amp; contract</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <ChainStatus chain={chain} />
+          </CardContent>
+        </Card>
+
+        <Button type="submit" size="lg" className="w-full" disabled={busy}>
+          <Scan /> {busy ? "Logging…" : "Log checkpoint event"}
+        </Button>
+      </form>
+
+      {packages.length === 0 && (
+        <p className="text-sm text-muted-foreground">No in-transit packages to log right now.</p>
+      )}
+    </div>
+  );
+}
