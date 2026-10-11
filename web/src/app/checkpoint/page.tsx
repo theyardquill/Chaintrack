@@ -19,6 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatusBadge } from "@/components/status-badge";
 import { ChainStatus } from "@/components/chain-status";
 import { ReceiptCard } from "@/components/receipt-card";
+import { LocationPicker } from "@/components/location-picker";
 import { useChainTrack, useStoreState } from "@/lib/chain";
 import { useChainContract } from "@/lib/use-chain-contract";
 import { chainGetUserByAddress } from "@/lib/web3";
@@ -59,6 +60,7 @@ export default function CheckpointPage() {
   const activePackages = state.packages.filter((p) => NEXT_STATUS[p.status].length > 0);
   const [packageId, setPackageId] = useState<string>("");
   const [location, setLocation] = useState("");
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [status, setStatus] = useState<PackageStatus>("InTransit");
   const [lastEvent, setLastEvent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,9 +92,10 @@ export default function CheckpointPage() {
     }
     const s = loadSession();
     const agentId = s?.type === "user" ? s.user.id : undefined;
-    track(location.trim(), status, Number(packageId), agentId);
+    track(location.trim(), status, Number(packageId), agentId, coords ?? undefined);
     setLastEvent(`${current?.qrHash} → ${STATUS_LABEL[status]} at ${location.trim()}`);
     setLocation("");
+    setCoords(null);
 
     setChainMsg(null);
     setChainErr(null);
@@ -185,6 +188,7 @@ export default function CheckpointPage() {
             value={location}
             onChange={(e) => setLocation(e.target.value)}
           />
+          <LocationPicker coords={coords} onCoords={setCoords} onName={setLocation} />
         </div>
         <div className="space-y-2">
           <Label>Next status</Label>

@@ -52,6 +52,8 @@ export interface Checkpoint {
   location: string;
   timestamp: number;
   status: PackageStatus;
+  lat?: number;
+  lng?: number;
 }
 
 export interface ChainTrackState {

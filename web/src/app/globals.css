@@ -128,3 +128,28 @@
     @apply font-sans;
   }
 }
+@layer components {
+  .ct-pin {
+    display: block;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+    background: #6b7280;
+  }
+  .ct-pin--registered { background: #6b7280; }
+  .ct-pin--intransit { background: #2563eb; }
+  .ct-pin--outfordelivery { background: #d97706; }
+  .ct-pin--delivered { background: #059669; }
+  .ct-pin--failed { background: #dc2626; }
+  .ct-pin--cancelled { background: #52525b; }
+  .ct-pin--pick { background: #7c3aed; }
+}
+
+@media print {
+  header,
+  footer {
+    display: none !important;
+  }
+}

@@ -117,6 +117,13 @@ async function main() {
     await send("Page.navigate", { url });
     await sleep(1500);
   };
+  const waitForSel = async (sel, tries = 24, ms = 500) => {
+    for (let i = 0; i < tries; i++) {
+      if (await evalJS(`!!document.querySelector(${JSON.stringify(sel)})`)) return true;
+      await sleep(ms);
+    }
+    return false;
+  };
 
   const results = [];
   const check = (name, ok, extra = "") => {
@@ -167,9 +174,10 @@ async function main() {
   await clickByText("Connect wallet to unlock on-chain escrow");
   await sleep(2500);
   check("agent connects as Courier on-chain", await has("Courier Corp"));
+  check("location picker renders map", await waitForSel(".leaflet-container"));
   const picked = await evalJS(`(async()=>{const trig=document.querySelector("button[aria-haspopup='listbox']"); if(!trig) return "NO TRIG"; trig.click(); await new Promise(r=>setTimeout(r,600)); const opt=[...document.querySelectorAll("[role=option]")].find(o=>o.textContent.includes(${JSON.stringify(code)})); if(!opt) return "NO OPT"; opt.click(); await new Promise(r=>setTimeout(r,400)); return "OK";})()`);
   check("selected booked package", picked === "OK", picked);
-  await setInput("e.g. JKIA Cargo Terminal", "Nairobi Hub");
+  await clickByText("Nairobi Sender Hub");
   await evalJS(`(()=>{const cb=[...document.querySelectorAll("input[type=checkbox]")].find(c=>c.closest("label")?.innerText.includes("Also write this checkpoint")); if(!cb) return false; cb.click(); return true;})()`);
   await clickByText("Log checkpoint event");
   for (let i = 0; i < 30; i++) {
@@ -177,8 +185,10 @@ async function main() {
     await sleep(700);
   }
   check("checkpoint logged on-chain", await has("On-chain checkpoint logged"));
+  const geoCount = await evalJS(`(()=>{try{const s=JSON.parse(localStorage.getItem("chaintrack-demo-v1")); return s.checkpoints.filter(c=>typeof c.lat==="number"&&typeof c.lng==="number").length;}catch{return -1;}})()`);
+  check("checkpoint coordinates stored from picker", Number(geoCount) > 0, String(geoCount));
 
-  await setInput("e.g. JKIA Cargo Terminal", "Last-Mile Dispatch");
+  await clickByText("JKIA Cargo Terminal");
   const stOk = await evalJS(`(async()=>{const trigs=[...document.querySelectorAll("button[aria-haspopup='listbox']")]; const trig=trigs[1]; if(!trig) return "NO TRIG"; trig.click(); await new Promise(r=>setTimeout(r,600)); const opt=[...document.querySelectorAll("[role=option]")].find(o=>o.textContent.includes("Out for Delivery")); if(!opt) return "NO OPT"; opt.click(); await new Promise(r=>setTimeout(r,400)); return "OK";})()`);
   check("set status Out for Delivery", stOk === "OK", stOk);
   await clickByText("Log checkpoint event");
@@ -198,6 +208,7 @@ async function main() {
   await sleep(2500);
   check("track shows on-chain record", await has("On-chain record"));
   check("track shows package on-chain", await has("package #"));
+  check("track shows journey map", await waitForSel(".leaflet-container"));
   await setInput("Delivery code", "DEL-4242");
   await clickByText("Confirm on-chain");
   for (let i = 0; i < 30; i++) {
@@ -223,6 +234,7 @@ async function main() {
   check("status report shows package details", await has("About this package"));
   check("status report shows recipient", await has("To (receiver)"));
   check("status report share action", await has("Copy share link"));
+  check("status report route map", await waitForSel(".leaflet-container"));
 
   // ---- 5. Agent "marking as delivered" flow: ship a second package, drive it
   //          to Delivered from the checkpoint console, assert the receipt card

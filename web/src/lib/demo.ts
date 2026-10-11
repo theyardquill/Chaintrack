@@ -7,9 +7,15 @@ import type {
   Transaction,
   User,
 } from "./types";
+import { coordsFor } from "./geo";
 
 const STORAGE_KEY = "chaintrack-demo-v1";
 const HOUR = 3_600_000;
+
+function geo(location: string): Pick<Checkpoint, "lat" | "lng"> {
+  const c = coordsFor(location);
+  return c ? { lat: c.lat, lng: c.lng } : {};
+}
 const DAY = 24 * HOUR;
 
 function seed(): ChainTrackState {
@@ -81,6 +87,7 @@ function seed(): ChainTrackState {
       location: "Nairobi Sender Hub",
       timestamp: now - 2 * DAY,
       status: "InTransit",
+      ...geo("Nairobi Sender Hub"),
     },
     {
       id: 2,
@@ -89,6 +96,7 @@ function seed(): ChainTrackState {
       location: "JKIA Cargo Terminal",
       timestamp: now - 1 * DAY,
       status: "InTransit",
+      ...geo("JKIA Cargo Terminal"),
     },
     {
       id: 3,
@@ -97,6 +105,7 @@ function seed(): ChainTrackState {
       location: "Nairobi Sender Hub",
       timestamp: now - 9 * DAY,
       status: "InTransit",
+      ...geo("Nairobi Sender Hub"),
     },
     {
       id: 4,
@@ -105,6 +114,7 @@ function seed(): ChainTrackState {
       location: "Destination Branch",
       timestamp: now - 8 * DAY,
       status: "OutForDelivery",
+      ...geo("Destination Branch"),
     },
     {
       id: 5,
@@ -113,6 +123,7 @@ function seed(): ChainTrackState {
       location: "Recipient door",
       timestamp: now - 3 * DAY,
       status: "Delivered",
+      ...geo("Recipient door"),
     },
   ];
   return { users, packages, transactions, checkpoints };
@@ -219,7 +230,7 @@ export function bookShipment(
 
 export function logCheckpoint(
   state: ChainTrackState,
-  input: { packageId: number; location: string; status: PackageStatus; agentId?: number }
+  input: { packageId: number; location: string; status: PackageStatus; agentId?: number; lat?: number; lng?: number }
 ): ChainTrackState {
   const now = Date.now();
   const id = ++nextId;
@@ -238,6 +249,9 @@ export function logCheckpoint(
       location: input.location,
       timestamp: now,
       status: input.status,
+      ...(typeof input.lat === "number" && typeof input.lng === "number"
+        ? { lat: input.lat, lng: input.lng }
+        : geo(input.location)),
     },
   ];
   return { ...state, packages, checkpoints };

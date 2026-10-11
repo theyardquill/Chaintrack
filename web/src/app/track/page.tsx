@@ -11,7 +11,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PackageCard } from "@/components/package-card";
 import { TrackingTimeline } from "@/components/tracking-timeline";
 import { OnChainRecord } from "@/components/on-chain-record";
+import { CheckpointMap } from "@/components/checkpoint-map";
 import { useChainTrack, useStoreState } from "@/lib/chain";
+import { resolveCoords } from "@/lib/geo";
 import { TXN_LABEL } from "@/lib/types";
 import { fmtAmount } from "@/lib/format";
 
@@ -120,6 +122,17 @@ function TrackContent() {
               <TrackingTimeline checkpoints={checkpointsForPackage(pkg.id)} />
             </CardContent>
           </Card>
+
+          {checkpointsForPackage(pkg.id).some((c) => resolveCoords(c)) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Journey map</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CheckpointMap checkpoints={checkpointsForPackage(pkg.id)} />
+              </CardContent>
+            </Card>
+          )}
 
           {pkg.status === "OutForDelivery" && (
             <Card>

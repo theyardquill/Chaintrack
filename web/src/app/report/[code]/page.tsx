@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChainStatus } from "@/components/chain-status";
 import { StatusBadge, TxnBadge } from "@/components/status-badge";
+import { CheckpointMap } from "@/components/checkpoint-map";
 import { useChainTrack, useStoreState } from "@/lib/chain";
 import { useChainContract } from "@/lib/use-chain-contract";
+import { resolveCoords } from "@/lib/geo";
 import { onChainReceipt } from "@/lib/chain-receipt";
 import {
   chainGetCheckpoints,
@@ -246,6 +248,17 @@ export default function ReportPage() {
                 <span className="text-xs text-muted-foreground">{fmtDate(c.timestamp)}</span>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {journey.some((c) => resolveCoords(c)) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Route map</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CheckpointMap checkpoints={journey} />
           </CardContent>
         </Card>
       )}
