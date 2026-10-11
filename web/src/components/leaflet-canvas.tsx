@@ -3,7 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import { useEffect } from "react";
 import L from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 
 export interface MapMarker {
   id: string | number;
@@ -59,12 +59,14 @@ export default function LeafletCanvas({
   center,
   zoom = 11,
   onPick,
+  connect = false,
   className = "h-72 w-full rounded-md",
 }: {
   markers: MapMarker[];
   center: [number, number];
   zoom?: number;
   onPick?: (lat: number, lng: number) => void;
+  connect?: boolean;
   className?: string;
 }) {
   const points = markers.map((m) => [m.lat, m.lng] as [number, number]);
@@ -76,6 +78,12 @@ export default function LeafletCanvas({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      {connect && points.length > 1 && (
+        <Polyline
+          positions={points}
+          pathOptions={{ color: "#2563eb", weight: 3, opacity: 0.75, dashArray: "6 8" }}
+        />
+      )}
       <Resizer />
       <FitBounds points={points} signature={signature} />
       {onPick && <ClickCatcher onPick={onPick} />}

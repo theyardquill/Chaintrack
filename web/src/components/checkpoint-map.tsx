@@ -46,6 +46,7 @@ export function CheckpointMap({ checkpoints }: { checkpoints: Checkpoint[] }) {
     <LeafletCanvas
       markers={markers}
       center={[DEFAULT_CENTER.lat, DEFAULT_CENTER.lng]}
+      connect
       className="z-0 h-72 w-full rounded-md"
     />
   );

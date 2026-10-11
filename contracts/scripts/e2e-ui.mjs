@@ -209,6 +209,7 @@ async function main() {
   check("track shows on-chain record", await has("On-chain record"));
   check("track shows package on-chain", await has("package #"));
   check("track shows journey map", await waitForSel(".leaflet-container"));
+  check("track shows route line", await waitForSel(".leaflet-overlay-pane path"));
   await setInput("Delivery code", "DEL-4242");
   await clickByText("Confirm on-chain");
   for (let i = 0; i < 30; i++) {
@@ -235,6 +236,7 @@ async function main() {
   check("status report shows recipient", await has("To (receiver)"));
   check("status report share action", await has("Copy share link"));
   check("status report route map", await waitForSel(".leaflet-container"));
+  check("status report route line", await waitForSel(".leaflet-overlay-pane path"));
 
   // ---- 5. Agent "marking as delivered" flow: ship a second package, drive it
   //          to Delivered from the checkpoint console, assert the receipt card
