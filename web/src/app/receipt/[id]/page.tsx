@@ -8,57 +8,133 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChainStatus } from "@/components/chain-status";
-import { ReceiptCard } from "@/components/receipt-card";
+import { ReceiptCard, type ReceiptDetail } from "@/components/receipt-card";
 import { useChainTrack } from "@/lib/chain";
 import { useChainContract } from "@/lib/use-chain-contract";
 import { onChainReceipt } from "@/lib/chain-receipt";
 import { chainGetPackageByCode, chainGetReceiptHash } from "@/lib/web3";
 import { formatReceiptHash } from "@/lib/receipt";
+import type { PackageDetail } from "@/lib/db/repo";
+import type { Checkpoint, Package, Transaction, User } from "@/lib/types";
+
+function toDetail(d: PackageDetail): ReceiptDetail {
+  const pkg: Package = {
+    id: d.pkg._id,
+    qrHash: d.pkg.qrHash,
+    contentHash: d.pkg.contentHash,
+    weight: d.pkg.weight,
+    size: d.pkg.size,
+    senderId: d.pkg.senderId,
+    receiverId: d.pkg.receiverId,
+    activeAgentId: d.pkg.activeAgentId,
+    status: d.pkg.status,
+    createdAt: d.pkg.createdAt,
+    deliveredAt: d.pkg.deliveredAt,
+  };
+  const person = (id: number): User | undefined => {
+    const p = d.people.find((x) => x.id === id);
+    return p ? { id: p.id, name: p.name, phone: p.phone, role: p.role } : undefined;
+  };
+  const txn: Transaction | null = d.txn
+    ? {
+        id: d.txn._id,
+        packageId: d.txn.packageId,
+        senderId: d.txn.senderId,
+        receiverId: d.txn.receiverId,
+        amount: d.txn.amount,
+        currency: d.txn.currency,
+        status: d.txn.status,
+        createdAt: d.txn.createdAt,
+        settledAt: d.txn.settledAt,
+      }
+    : null;
+  const checkpoints: Checkpoint[] = d.checkpoints.map((c) => ({
+    id: c._id,
+    packageId: c.packageId,
+    agentId: c.agentId,
+    location: c.location,
+    timestamp: c.timestamp,
+    status: c.status,
+    lat: c.lat,
+    lng: c.lng,
+  }));
+  return {
+    pkg,
+    sender: person(pkg.senderId),
+    receiver: person(pkg.receiverId),
+    txn,
+    checkpoints,
+  };
+}
 
 export default function ReceiptPage() {
   const params = useParams<{ id: string }>();
-  const packageId = Number(params.id);
+  const raw = decodeURIComponent(params.id ?? "").trim();
   const { state } = useChainTrack();
   const chain = useChainContract();
+  const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
+
   const [hash, setHash] = useState<string | null>(null);
   const [storedHash, setStoredHash] = useState<string | null>(null);
-  const [lookupDone, setLookupDone] = useState(false);
+  const [apiDetail, setApiDetail] = useState<PackageDetail | null>(null);
+  const [apiDone, setApiDone] = useState(false);
 
-  const pkg = state.packages.find((p) => p.id === packageId);
+  // Demo store lookup — accepts the numeric id (legacy links) or a tracking code.
+  const demoPkg = /^\d+$/.test(raw)
+    ? state.packages.find((p) => p.id === Number(raw))
+    : state.packages.find((p) => p.qrHash.toLowerCase() === raw.toLowerCase());
+
+  // Clerk mode: resolve the receipt from Mongo via the public tracking lookup.
+  useEffect(() => {
+    if (!clerkEnabled || !raw) return;
+    let active = true;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/packages/${encodeURIComponent(raw)}`, {
+          cache: "no-store",
+        });
+        const data = res.ok ? ((await res.json()) as PackageDetail) : null;
+        if (active) setApiDetail(data);
+      } catch {
+        if (active) setApiDetail(null);
+      } finally {
+        if (active) setApiDone(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [clerkEnabled, raw]);
+
+  const detail = clerkEnabled && apiDetail ? toDetail(apiDetail) : null;
+  const pkg = clerkEnabled ? detail?.pkg : demoPkg;
   const qrHash = pkg?.qrHash;
+  const notFound = clerkEnabled ? apiDone && !detail : !demoPkg;
 
   useEffect(() => {
     if (!qrHash) return;
     let active = true;
     (async () => {
       await Promise.resolve();
-      if (!active) return;
-      if (chain.status !== "ready") {
-        setLookupDone(true);
-        return;
-      }
+      if (!active || chain.status !== "ready") return;
       try {
         const found = await chainGetPackageByCode(qrHash);
-        if (!active) return;
-        if (!found) {
-          setLookupDone(true);
-          return;
-        }
+        if (!active || !found) return;
         const receipt = await onChainReceipt(found);
         const stored = await chainGetReceiptHash(found.id);
         if (!active) return;
         setHash(receipt.hash);
         setStoredHash(stored);
       } catch {
-        if (!active) return;
-      } finally {
-        if (active) setLookupDone(true);
+        // ledger read failed — leave the receipt unverified
       }
     })();
     return () => {
       active = false;
     };
   }, [chain.status, qrHash]);
+
+  const reference = pkg?.id ?? raw;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -73,7 +149,7 @@ export default function ReceiptPage() {
         <div>
           <h1 className="text-2xl font-semibold">Proof of delivery</h1>
           <p className="text-sm text-muted-foreground">
-            Receipt <span className="font-mono">#{packageId}</span> · escrowed on the ChainTrack
+            Receipt <span className="font-mono">#{reference}</span> · escrowed on the ChainTrack
             ledger
           </p>
         </div>
@@ -91,20 +167,25 @@ export default function ReceiptPage() {
         </div>
       </div>
 
-      {!pkg && lookupDone && (
+      {notFound && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Receipt not found</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            No demo package #{packageId} exists. Connect a wallet to verify an on-chain-only
-            receipt, or track a package to generate one.
+            No receipt #{reference} exists. Connect a wallet to verify an on-chain-only receipt, or
+            track a package to generate one.
           </CardContent>
         </Card>
       )}
 
       {pkg && (
-        <ReceiptCard code={pkg.qrHash} chainHash={chain.status === "ready" ? hash : null} storedHash={chain.status === "ready" ? storedHash : null} />
+        <ReceiptCard
+          code={pkg.qrHash}
+          detail={detail}
+          chainHash={chain.status === "ready" ? hash : null}
+          storedHash={chain.status === "ready" ? storedHash : null}
+        />
       )}
 
       {chain.status !== "ready" && (

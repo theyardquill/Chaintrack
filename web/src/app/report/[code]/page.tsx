@@ -404,7 +404,7 @@ export default function ReportPage() {
               Anyone can confirm this report on the public ChainTrack contract. For the full
               cryptographic proof, open the technical receipt.
             </p>
-            <Link href={`/receipt/${chainFacts.pkg.id}`} className="print:hidden">
+            <Link href={`/receipt/${chainFacts.pkg.qrHash}`} className="print:hidden">
               <Button variant="outline" size="sm">
                 <FileText className="mr-1.5 h-3.5 w-3.5" /> View technical proof
               </Button>

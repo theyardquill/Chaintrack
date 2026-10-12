@@ -7,12 +7,29 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useChainTrack, useStoreState } from "@/lib/chain";
 import { buildReceiptPayload, receiptPayloadHash, RECEIPT_LABEL, formatReceiptHash } from "@/lib/receipt";
-import { STATUS_LABEL, TXN_LABEL } from "@/lib/types";
+import {
+  STATUS_LABEL,
+  TXN_LABEL,
+  type Checkpoint,
+  type Package,
+  type Transaction,
+  type User,
+} from "@/lib/types";
 import { fmtAmount, fmtDate } from "@/lib/format";
+
+export interface ReceiptDetail {
+  pkg: Package;
+  sender?: User | null;
+  receiver?: User | null;
+  txn?: Transaction | null;
+  checkpoints: Checkpoint[];
+}
 
 interface ReceiptCardProps {
   /** QR code — demo data is resolved by code (demo and on-chain ids differ). */
   code: string;
+  /** Resolved account data (Clerk mode, where the demo store is empty). */
+  detail?: ReceiptDetail | null;
   /** On-chain package id, for the receipt reference. */
   chainPackageId?: number;
   /** Canonical payload hash recomputed from on-chain facts at marking time. */
@@ -23,6 +40,7 @@ interface ReceiptCardProps {
 
 export function ReceiptCard({
   code,
+  detail,
   chainPackageId,
   chainHash = null,
   storedHash = null,
@@ -30,13 +48,13 @@ export function ReceiptCard({
   const { state } = useChainTrack();
   const { packageByCode, userById, txnForPackage, checkpointsForPackage } = useStoreState(state);
 
-  const pkg = packageByCode(code);
+  const pkg = detail?.pkg ?? packageByCode(code);
   if (!pkg) return null;
 
-  const sender = userById(pkg.senderId);
-  const receiver = userById(pkg.receiverId);
-  const txn = txnForPackage(pkg.id);
-  const checkpoints = checkpointsForPackage(pkg.id);
+  const sender = detail ? detail.sender ?? undefined : userById(pkg.senderId);
+  const receiver = detail ? detail.receiver ?? undefined : userById(pkg.receiverId);
+  const txn = detail ? detail.txn ?? undefined : txnForPackage(pkg.id);
+  const checkpoints = detail ? detail.checkpoints : checkpointsForPackage(pkg.id);
   const payload = buildReceiptPayload({
     pkg,
     sender,
@@ -62,7 +80,7 @@ export function ReceiptCard({
               <Share2 className="mr-1.5 h-3.5 w-3.5" /> Status report
             </Button>
           </Link>
-          <Link href={`/receipt/${pkg.id}`}>
+          <Link href={`/receipt/${pkg.qrHash}`}>
             <Button size="sm" variant="outline">
               <Printer className="mr-1.5 h-3.5 w-3.5" /> Print receipt
             </Button>

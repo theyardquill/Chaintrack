@@ -11,6 +11,10 @@ export const DEMO_LOCATIONS: GeoPoint[] = [
   { name: "JKIA Cargo Terminal", lat: -1.3192, lng: 36.9278 },
   { name: "Destination Branch", lat: -1.2649, lng: 36.8033 },
   { name: "Recipient door", lat: -1.2676, lng: 36.809 },
+  { name: "Mombasa Port", lat: -4.0435, lng: 39.6682 },
+  { name: "Nakuru Transit Yard", lat: -0.3031, lng: 36.08 },
+  { name: "Kisumu Hub", lat: -0.0917, lng: 34.768 },
+  { name: "Eldoret Branch", lat: 0.5143, lng: 35.2698 },
 ];
 
 const BY_NAME = new Map(DEMO_LOCATIONS.map((l) => [normalize(l.name), l]));
