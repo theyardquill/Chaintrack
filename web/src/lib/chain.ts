@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import type { ChainTrackState, Checkpoint, Package, Role, Transaction, User } from "./types";
+import { useWallet } from "./wallet-context";
 import {
   bindWallet as bindWalletInDemo,
   bookShipment as bookInDemo,
@@ -28,8 +29,7 @@ export interface BookShipmentInput {
 
 export function useChainTrack() {
   const [state, setState] = useState<ChainTrackState>(() => loadDemo());
-  const [wallet, setWallet] = useState<string | null>(null);
-  const [walletError, setWalletError] = useState<string | null>(null);
+  const { wallet, walletError, connectWallet } = useWallet();
 
   const update = useCallback((next: ChainTrackState) => {
     setState(next);
@@ -101,17 +101,6 @@ export function useChainTrack() {
     },
     [state, update]
   );
-
-  const connectWallet = useCallback(async () => {
-    try {
-      const { getActiveAccount } = await import("./web3");
-      const account = await getActiveAccount();
-      setWallet(account);
-      setWalletError(null);
-    } catch (err) {
-      setWalletError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
 
   return {
     state,

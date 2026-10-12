@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useChainTrack } from "./chain";
+import { useWallet } from "./wallet-context";
 import type { Checkpoint, Package, PackageStatus, Role, Transaction } from "./types";
 import type { ChainUser } from "./web3";
 import {
@@ -16,6 +16,7 @@ import {
   chainLogCheckpoint,
   chainRecordReceipt,
   chainRegisterUser,
+  getActiveAccount,
   getChainTrack,
   type ChainTrackConnection,
 } from "./web3";
@@ -24,7 +25,8 @@ export type ChainStatus = "idle" | "checking" | "ready" | "unavailable";
 
 export interface ChainContractApi {
   connect: () => Promise<void>;
-  connectWallet: () => Promise<void>;
+  connectWallet: () => Promise<string | null>;
+  ensureConnection: () => Promise<{ connection: ChainTrackConnection; wallet: string }>;
   wallet: string | null;
   status: ChainStatus;
   connection: ChainTrackConnection | null;
@@ -78,32 +80,35 @@ export interface ChainContractApi {
  * mode and guarantees Vercel builds are unaffected.
  */
 export function useChainContract(): ChainContractApi {
-  const { wallet, connectWallet } = useChainTrack();
+  const { wallet, setWallet, connectWallet } = useWallet();
   const [status, setStatus] = useState<ChainStatus>("idle");
   const [connection, setConnection] = useState<ChainTrackConnection | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [owner, setOwner] = useState<string | null>(null);
   const [identity, setIdentity] = useState<ChainUser | null>(null);
 
-  const syncProfile = useCallback(async (connection: ChainTrackConnection | null) => {
-    await Promise.resolve();
-    if (!connection || !wallet) {
-      setOwner(null);
-      setIdentity(null);
-      return;
-    }
-    try {
-      const theOwner = String(await connection.contract.methods.owner().call());
-      setOwner(theOwner);
-    } catch {
-      setOwner(null);
-    }
-    try {
-      setIdentity(await chainGetUserByAddress(wallet));
-    } catch {
-      setIdentity(null);
-    }
-  }, [wallet]);
+  const syncProfile = useCallback(
+    async (connection: ChainTrackConnection | null, account: string | null) => {
+      await Promise.resolve();
+      if (!connection || !account) {
+        setOwner(null);
+        setIdentity(null);
+        return;
+      }
+      try {
+        const theOwner = String(await connection.contract.methods.owner().call());
+        setOwner(theOwner);
+      } catch {
+        setOwner(null);
+      }
+      try {
+        setIdentity(await chainGetUserByAddress(account));
+      } catch {
+        setIdentity(null);
+      }
+    },
+    [],
+  );
 
   const connect = useCallback(async () => {
     await Promise.resolve();
@@ -113,13 +118,35 @@ export function useChainContract(): ChainContractApi {
       const connection = await getChainTrack();
       setConnection(connection);
       setStatus("ready");
-      void syncProfile(connection);
+      void syncProfile(connection, wallet);
     } catch (err) {
       setConnection(null);
       setStatus("unavailable");
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [syncProfile]);
+  }, [syncProfile, wallet]);
+
+  // Connects the wallet (if needed) and resolves the contract for the current
+  // chain in one step, so escrow booking doesn't require a separate click.
+  const ensureConnection = useCallback(async () => {
+    setError(null);
+    setStatus("checking");
+    try {
+      const account = wallet ?? (await getActiveAccount());
+      if (account !== wallet) setWallet(account);
+      const connection = await getChainTrack();
+      setConnection(connection);
+      setStatus("ready");
+      void syncProfile(connection, account);
+      return { connection, wallet: account };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setConnection(null);
+      setStatus("unavailable");
+      setError(message);
+      throw new Error(message);
+    }
+  }, [wallet, setWallet, syncProfile]);
 
   useEffect(() => {
     if (!wallet) return;
@@ -133,7 +160,7 @@ export function useChainContract(): ChainContractApi {
         if (!active) return;
         setConnection(connection);
         setStatus("ready");
-        void syncProfile(connection);
+        void syncProfile(connection, wallet);
       } catch (err) {
         if (!active) return;
         setConnection(null);
@@ -156,6 +183,7 @@ export function useChainContract(): ChainContractApi {
   return {
     connect,
     connectWallet,
+    ensureConnection,
     wallet,
     status: ready ? status : "idle",
     connection: ready ? connection : null,

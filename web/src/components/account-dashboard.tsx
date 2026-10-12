@@ -277,7 +277,7 @@ export function AccountDashboard() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">
-                    {pkg?.qrHash ?? `#${t.packageId}`} · {fmtAmount(t.amount, t.currency)}
+                    {pkg?.qrHash ?? "Unknown code"} · {fmtAmount(t.amount, t.currency)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     ↔ {nameOf(t.senderId)} → {nameOf(t.receiverId)} ·{" "}

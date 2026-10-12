@@ -5,6 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeSync } from "@/components/theme-sync";
+import { WalletProvider } from "@/lib/wallet-context";
 
 // Chosen at build time; see src/proxy.ts. "clerk" mounts the Clerk provider,
 // anything else keeps the localStorage demo auth.
@@ -47,13 +48,15 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
         <ThemeSync />
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
-        <footer className="border-t py-6">
-          <p className="mx-auto max-w-5xl px-4 text-center text-xs text-muted-foreground">
-            ChainTrack — blockchain ledger · smart-contract escrow · cross-border crypto payments
-          </p>
-        </footer>
+        <WalletProvider>
+          <SiteHeader />
+          <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
+          <footer className="border-t py-6">
+            <p className="mx-auto max-w-5xl px-4 text-center text-xs text-muted-foreground">
+              ChainTrack — blockchain ledger · smart-contract escrow · cross-border crypto payments
+            </p>
+          </footer>
+        </WalletProvider>
       </body>
     </html>
   );

@@ -72,8 +72,12 @@ export function AccountCheckpoint() {
             meBody.user?.wallets[0]?.address ??
             null,
         );
-        setPackages(pkgBody.packages ?? []);
-        if (pkgBody.packages?.[0]) setPackageId(String(pkgBody.packages[0]._id));
+        const loaded = pkgBody.packages ?? [];
+        setPackages(loaded);
+        if (loaded[0]) {
+          setPackageId(String(loaded[0]._id));
+          setStatus(NEXT_STATUS[loaded[0].status][0] ?? "InTransit");
+        }
       } catch {
         if (active) setError("could not load packages");
       }
@@ -83,8 +87,10 @@ export function AccountCheckpoint() {
     };
   }, [isSignedIn]);
 
-  const current = packages.find((p) => p._id === Number(packageId));
+  const activePackages = packages.filter((p) => NEXT_STATUS[p.status].length > 0);
+  const current = activePackages.find((p) => p._id === Number(packageId));
   const nextOptions = current ? NEXT_STATUS[current.status] : [];
+  const selectableStatus = nextOptions.includes(status) ? status : (nextOptions[0] ?? "");
 
   if (!isLoaded) {
     return <div className="py-20 text-center text-sm text-muted-foreground">Loading…</div>;
@@ -110,18 +116,20 @@ export function AccountCheckpoint() {
     try {
       if (!current) throw new Error("pick a package");
       if (!location.trim()) throw new Error("enter the checkpoint location");
+      if (nextOptions.length === 0) throw new Error("this package has no further status to log");
+      const nextStatus = selectableStatus as PackageStatus;
 
       let chainMeta: ActivePackage["chain"];
       if (current.chain?.onChainId) {
         if (!myWallet) throw new Error("link a wallet on your account page first");
-        if (!chain.connection) throw new Error("connect your wallet first");
-        if ((chain.wallet ?? "").toLowerCase() !== myWallet.toLowerCase()) {
+        const { wallet: account } = await chain.ensureConnection();
+        if (account.toLowerCase() !== myWallet.toLowerCase()) {
           throw new Error("connect the wallet linked to your account");
         }
         const txHash = await chain.logCheckpoint({
           packageId: current.chain.onChainId,
           location: location.trim(),
-          status,
+          status: nextStatus,
         });
         chainMeta = { ...current.chain, txHash };
       }
@@ -133,7 +141,7 @@ export function AccountCheckpoint() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             location: location.trim(),
-            status,
+            status: nextStatus,
             chain: chainMeta,
             lat: coords?.lat,
             lng: coords?.lng,
@@ -143,12 +151,21 @@ export function AccountCheckpoint() {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? "checkpoint failed");
 
-      setLastEvent(`${current.qrHash} → ${STATUS_LABEL[status]} at ${location.trim()}`);
+      setLastEvent(`${current.qrHash} → ${STATUS_LABEL[nextStatus]} at ${location.trim()}`);
       setLocation("");
       setCoords(null);
       setPackages((prev) =>
-        prev.map((p) => (p._id === current._id ? { ...p, status } : p)),
+        prev
+          .map((p) => (p._id === current._id ? { ...p, status: nextStatus } : p))
+          .filter((p) => NEXT_STATUS[p.status].length > 0),
       );
+      const following = NEXT_STATUS[nextStatus][0];
+      if (following) {
+        setStatus(following);
+      } else {
+        setPackageId("");
+        setStatus("InTransit");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -171,18 +188,22 @@ export function AccountCheckpoint() {
           <Label>Package</Label>
           <Select
             value={packageId}
+            items={activePackages.map((p) => ({
+              value: String(p._id),
+              label: `${p.qrHash} · ${STATUS_LABEL[p.status]}`,
+            }))}
             onValueChange={(v) => {
               setPackageId(v ?? "");
-              const next = packages.find((p) => p._id === Number(v));
+              const next = activePackages.find((p) => p._id === Number(v));
               const opts = next ? NEXT_STATUS[next.status] : [];
-              if (opts[0]) setStatus(opts[0]);
+              setStatus(opts[0] ?? "InTransit");
             }}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select an in-transit package" />
             </SelectTrigger>
             <SelectContent>
-              {packages.map((p) => (
+              {activePackages.map((p) => (
                 <SelectItem key={p._id} value={String(p._id)}>
                   {p.qrHash} · {STATUS_LABEL[p.status]}
                 </SelectItem>
@@ -204,7 +225,8 @@ export function AccountCheckpoint() {
         <div className="space-y-2">
           <Label>Next status</Label>
           <Select
-            value={status}
+            value={selectableStatus}
+            items={nextOptions.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
             onValueChange={(v) => setStatus(v as PackageStatus)}
             disabled={nextOptions.length === 0}
           >

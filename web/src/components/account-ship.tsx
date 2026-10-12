@@ -40,6 +40,10 @@ function genCode(): string {
   return `CTK-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
+function shortAddress(addr: string): string {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
 export function AccountShip() {
   const { isLoaded, isSignedIn } = useAuth();
   const chain = useChainContract();
@@ -54,6 +58,7 @@ export function AccountShip() {
   const [deliveryCode, setDeliveryCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [booked, setBooked] = useState<{ qrHash: string; txHash?: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -105,15 +110,12 @@ export function AccountShip() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setProgress(null);
     setBusy(true);
     try {
       if (!me || me.appUserId == null) throw new Error("your account is not ready yet");
       if (me.role !== "SENDER") throw new Error("set your role to sender first");
       if (!primaryWallet) throw new Error("link a wallet on the account page first");
-      if (!chain.connection) throw new Error("connect your wallet first");
-      if ((chain.wallet ?? "").toLowerCase() !== primaryWallet.toLowerCase()) {
-        throw new Error("connect the wallet that is linked to your account");
-      }
       const receiver = receivers.find((r) => r.id === Number(receiverId));
       if (!receiver) throw new Error("pick a receiver");
       if (!receiver.wallet) throw new Error("that receiver has not linked a wallet yet");
@@ -121,6 +123,16 @@ export function AccountShip() {
       if (deliveryCode.trim().length < 4) throw new Error("delivery code must be at least 4 characters");
       if (Number(amount) <= 0) throw new Error("escrow amount must be greater than zero");
 
+      // Connect the wallet and resolve the contract as part of booking.
+      setProgress("Connecting wallet…");
+      const { connection, wallet: account } = await chain.ensureConnection();
+      if (account.toLowerCase() !== primaryWallet.toLowerCase()) {
+        throw new Error(
+          `Connect the wallet linked to your account (${shortAddress(primaryWallet)}).`,
+        );
+      }
+
+      setProgress("Locking escrow on-chain…");
       const onChainId =
         receiver.onChainUserId ?? (await chainGetUserByAddress(receiver.wallet)).id;
 
@@ -137,6 +149,7 @@ export function AccountShip() {
         amount,
       );
 
+      setProgress("Saving to your account…");
       const res = await fetch("/api/packages", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -150,8 +163,8 @@ export function AccountShip() {
           currency: "ETH",
           deliveryCode,
           chain: {
-            chainId: chain.connection.chainId,
-            contract: chain.connection.address,
+            chainId: connection.chainId,
+            contract: connection.address,
             onChainId: packageId,
             txHash,
           },
@@ -167,6 +180,7 @@ export function AccountShip() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -191,14 +205,21 @@ export function AccountShip() {
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-2">
           <Label>Receiver</Label>
-          <Select value={receiverId} onValueChange={(v) => setReceiverId(v ?? "")}>
+          <Select
+            value={receiverId}
+            items={receivers.map((r) => ({
+              value: String(r.id),
+              label: `${r.name || "Unnamed user"}${r.wallet ? "" : " (no wallet)"}`,
+            }))}
+            onValueChange={(v) => setReceiverId(v ?? "")}
+          >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select receiver" />
             </SelectTrigger>
             <SelectContent>
               {receivers.map((r) => (
                 <SelectItem key={r.id} value={String(r.id)}>
-                  {r.name || `#${r.id}`}
+                  {r.name || "Unnamed user"}
                   {r.wallet ? "" : " (no wallet)"}
                 </SelectItem>
               ))}
@@ -287,7 +308,7 @@ export function AccountShip() {
         )}
 
         <Button type="submit" size="lg" className="w-full" disabled={busy}>
-          <Send /> {busy ? "Booking & locking escrow…" : "Book shipment & lock escrow"}
+          <Send /> {busy ? (progress ?? "Booking & locking escrow…") : "Book shipment & lock escrow"}
         </Button>
       </form>
 

@@ -163,7 +163,15 @@ function AdminShell() {
             </div>
             <div className="w-40 space-y-2">
               <Label>Role</Label>
-              <Select value={role} onValueChange={(v) => setRole((v as Role) ?? "SENDER")}>
+              <Select
+                value={role}
+                items={[
+                  { value: "SENDER", label: "Sender" },
+                  { value: "RECEIVER", label: "Receiver" },
+                  { value: "AGENT", label: "Agent" },
+                ]}
+                onValueChange={(v) => setRole((v as Role) ?? "SENDER")}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>

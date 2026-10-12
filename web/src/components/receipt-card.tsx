@@ -30,8 +30,6 @@ interface ReceiptCardProps {
   code: string;
   /** Resolved account data (Clerk mode, where the demo store is empty). */
   detail?: ReceiptDetail | null;
-  /** On-chain package id, for the receipt reference. */
-  chainPackageId?: number;
   /** Canonical payload hash recomputed from on-chain facts at marking time. */
   chainHash?: string | null;
   /** Receipt hash stored on the contract, if any. */
@@ -41,7 +39,6 @@ interface ReceiptCardProps {
 export function ReceiptCard({
   code,
   detail,
-  chainPackageId,
   chainHash = null,
   storedHash = null,
 }: ReceiptCardProps) {
@@ -104,18 +101,17 @@ export function ReceiptCard({
               <Badge variant="outline">Not stored on-chain yet</Badge>
             ))}
           <span>
-            receipt #{chainPackageId ?? pkg.id} · {pkg.qrHash} · payload{" "}
-            {formatReceiptHash(referenceHash)}
+            receipt #{pkg.qrHash} · payload {formatReceiptHash(referenceHash)}
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Sender</p>
-            <p className="font-medium">{sender?.name ?? `User #${pkg.senderId}`}</p>
+            <p className="font-medium">{sender?.name ?? "Unknown sender"}</p>
             <p className="text-xs text-muted-foreground">{sender?.phone}</p>
             <p className="mt-2 text-xs text-muted-foreground">Receiver</p>
-            <p className="font-medium">{receiver?.name ?? `User #${pkg.receiverId}`}</p>
+            <p className="font-medium">{receiver?.name ?? "Unknown receiver"}</p>
             <p className="text-xs text-muted-foreground">{receiver?.phone}</p>
           </div>
           <div className="space-y-2">

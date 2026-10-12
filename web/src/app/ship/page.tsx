@@ -111,14 +111,15 @@ function DemoShip() {
               "The sender has no on-chain wallet yet — register them in the admin console."
             );
           }
-          if (snd.wallet.toLowerCase() !== (chain.wallet ?? "").toLowerCase()) {
-            throw new Error("Connect the sender's wallet to record on-chain.");
-          }
           const recv = userById(receiver);
           if (!recv?.wallet) {
             throw new Error(
               "The receiver has no on-chain wallet yet — register them in the admin console."
             );
+          }
+          const { wallet: account } = await chain.ensureConnection();
+          if (account.toLowerCase() !== snd.wallet.toLowerCase()) {
+            throw new Error("Connect the sender's wallet to record on-chain.");
           }
           const onChainReceiver = await chainGetUserByAddress(recv.wallet);
           const hash = await chain.bookShipment(
@@ -134,7 +135,7 @@ function DemoShip() {
             String(amount)
           );
           setChainMsg(
-            `Booked on-chain · package #${hash.packageId} · tx ${hash.txHash}`
+            `Booked on-chain · ${qrHash} · tx ${hash.txHash}`
           );
         } catch (err) {
           setChainErr(err instanceof Error ? err.message : String(err));
@@ -165,7 +166,11 @@ function DemoShip() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Sender</Label>
-            <Select value={senderId} onValueChange={(v) => setSenderId(v ?? "")}>
+            <Select
+              value={senderId}
+              items={senders.map((u) => ({ value: u.id.toString(), label: `${u.name} · ${u.phone}` }))}
+              onValueChange={(v) => setSenderId(v ?? "")}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select sender" />
               </SelectTrigger>
@@ -180,7 +185,11 @@ function DemoShip() {
           </div>
           <div className="space-y-2">
             <Label>Receiver</Label>
-            <Select value={receiverId} onValueChange={(v) => setReceiverId(v ?? "")}>
+            <Select
+              value={receiverId}
+              items={receivers.map((u) => ({ value: u.id.toString(), label: `${u.name} · ${u.phone}` }))}
+              onValueChange={(v) => setReceiverId(v ?? "")}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select receiver" />
               </SelectTrigger>

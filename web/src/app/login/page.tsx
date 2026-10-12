@@ -178,6 +178,10 @@ export default function LoginPage() {
                     <Label>You are a…</Label>
                     <Select
                       value={form.role}
+                      items={ROLE_OPTIONS.map(({ value, hint }) => ({
+                        value,
+                        label: `${value} — ${hint}`,
+                      }))}
                       onValueChange={(v) => setForm({ ...form, role: (v as Role) ?? "SENDER" })}
                     >
                       <SelectTrigger>

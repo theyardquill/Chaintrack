@@ -77,7 +77,12 @@ function DemoCheckpoint() {
   const [receipt, setReceipt] = useState<{ code: string; packageId: number; hash: string; stored: string | null } | null>(null);
 
   const current = state.packages.find((p) => p.id === Number(packageId));
+  const packageOptions =
+    current && !activePackages.some((p) => p.id === current.id)
+      ? [current, ...activePackages]
+      : activePackages;
   const nextOptions = current ? NEXT_STATUS[current.status] : [];
+  const selectableStatus = nextOptions.includes(status) ? status : (nextOptions[0] ?? "InTransit");
   const selectedCheckpoints = packageId
     ? checkpointsForPackage(Number(packageId))
     : [];
@@ -97,12 +102,19 @@ function DemoCheckpoint() {
       setError("Pick a package and enter the checkpoint location.");
       return;
     }
+    if (nextOptions.length === 0) {
+      setError("This package has no further status to log.");
+      return;
+    }
+    const nextStatus = selectableStatus as PackageStatus;
     const s = loadSession();
     const agentId = s?.type === "user" ? s.user.id : undefined;
-    track(location.trim(), status, Number(packageId), agentId, coords ?? undefined);
-    setLastEvent(`${current?.qrHash} → ${STATUS_LABEL[status]} at ${location.trim()}`);
+    track(location.trim(), nextStatus, Number(packageId), agentId, coords ?? undefined);
+    setLastEvent(`${current?.qrHash} → ${STATUS_LABEL[nextStatus]} at ${location.trim()}`);
     setLocation("");
     setCoords(null);
+    const following = NEXT_STATUS[nextStatus][0];
+    if (following) setStatus(following);
 
     setChainMsg(null);
     setChainErr(null);
@@ -119,7 +131,8 @@ function DemoCheckpoint() {
               "This agent has no on-chain wallet yet — register them in the admin console."
             );
           }
-          if (agentUser.wallet.toLowerCase() !== (chain.wallet ?? "").toLowerCase()) {
+          const { wallet: account } = await chain.ensureConnection();
+          if (account.toLowerCase() !== agentUser.wallet.toLowerCase()) {
             throw new Error("Connect this agent's wallet to log on-chain.");
           }
           const onChainAgent = await chainGetUserByAddress(agentUser.wallet);
@@ -130,10 +143,10 @@ function DemoCheckpoint() {
           const tx = await chain.logCheckpoint({
             packageId: onChain.id,
             location: location.trim(),
-            status,
+            status: nextStatus,
           });
-          let msg = `Logged on-chain by agent #${onChainAgent.id} · tx ${tx}`;
-          if (status === "Delivered") {
+          let msg = `Logged on-chain by ${onChainAgent.name || "this agent"} · tx ${tx}`;
+          if (nextStatus === "Delivered") {
             const { hash } = await onChainReceipt(onChain);
             const receiptTx = await chain.recordReceipt({
               packageId: onChain.id,
@@ -171,16 +184,21 @@ function DemoCheckpoint() {
           <Label>Package</Label>
           <Select
                 value={packageId}
+                items={packageOptions.map((p) => ({
+                  value: p.id.toString(),
+                  label: `${p.qrHash} · ${STATUS_LABEL[p.status]}`,
+                }))}
                 onValueChange={(v) => {
                   setPackageId(v ?? "");
-                  setStatus(nextOptions[0] ?? "InTransit");
+                  const next = state.packages.find((p) => p.id === Number(v));
+                  setStatus((next ? NEXT_STATUS[next.status][0] : undefined) ?? "InTransit");
                 }}
               >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select an in-transit package" />
             </SelectTrigger>
             <SelectContent>
-              {activePackages.map((p) => (
+              {packageOptions.map((p) => (
                 <SelectItem key={p.id} value={p.id.toString()}>
                   {p.qrHash} · {STATUS_LABEL[p.status]}
                 </SelectItem>
@@ -200,7 +218,8 @@ function DemoCheckpoint() {
         <div className="space-y-2">
           <Label>Next status</Label>
           <Select
-            value={status}
+            value={selectableStatus}
+            items={nextOptions.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
             onValueChange={(v) => setStatus(v as PackageStatus)}
             disabled={nextOptions.length === 0}
           >
@@ -277,7 +296,6 @@ function DemoCheckpoint() {
       {current?.status === "Delivered" && (
         <ReceiptCard
           code={current.qrHash}
-          chainPackageId={receipt?.packageId ?? undefined}
           chainHash={receipt?.code === current.qrHash ? receipt.hash : null}
           storedHash={receipt?.code === current.qrHash ? receipt.stored : null}
         />

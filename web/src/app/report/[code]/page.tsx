@@ -171,7 +171,7 @@ export default function ReportPage() {
       const u = userById(id);
       if (u) return { id: u.id, name: u.name, phone: u.phone, role: u.role };
     }
-    return { id, name: `User #${id}`, phone: "", role: "NONE" as Role };
+    return { id, name: "Unknown user", phone: "", role: "NONE" as Role };
   };
 
   const sender = sourcePkg ? getPerson(sourcePkg.senderId) : undefined;
@@ -306,10 +306,10 @@ export default function ReportPage() {
           <CardContent className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
             <div>
               <p className="text-xs text-muted-foreground">From (sender)</p>
-              <p className="font-medium">{sender?.name ?? `Sender #${reportPkg.senderId}`}</p>
+              <p className="font-medium">{sender?.name ?? "Unknown sender"}</p>
               <p className="text-xs text-muted-foreground">{sender?.phone}</p>
               <p className="mt-2 text-xs text-muted-foreground">To (receiver)</p>
-              <p className="font-medium">{receiver?.name ?? `Receiver #${reportPkg.receiverId}`}</p>
+              <p className="font-medium">{receiver?.name ?? "Unknown receiver"}</p>
               <p className="text-xs text-muted-foreground">{receiver?.phone}</p>
             </div>
             <div>

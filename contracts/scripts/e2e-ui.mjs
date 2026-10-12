@@ -207,7 +207,8 @@ async function main() {
   await clickByText("Connect wallet to unlock on-chain escrow");
   await sleep(2500);
   check("track shows on-chain record", await has("On-chain record"));
-  check("track shows package on-chain", await has("package #"));
+  check("track shows package on-chain", await has(code));
+  check("track does not show raw package id", !(await has("package #")));
   check("track shows journey map", await waitForSel(".leaflet-container"));
   check("track shows route line", await waitForSel(".leaflet-overlay-pane path"));
   await setInput("Delivery code", "DEL-4242");
@@ -306,7 +307,7 @@ async function main() {
     console.error("SEED-DEBUG:", JSON.stringify(await evalJS(`({alerts:[...document.querySelectorAll("[role=alert]")].map(e=>e.innerText), body: document.body.innerText.slice(0, 700), url: location.href})`), null, 1));
   }
   check("seed package has on-chain record", seedOk);
-  check("seed package is package #1 (Registered)", await has("package #1"));
+  check("seed package shows its tracking code (Registered)", (await has("CTK-9000")) && (await has("Registered")));
   const escrowOk = await has("InEscrow");
   if (!escrowOk) {
     console.error("ESC-DEBUG:", JSON.stringify(await evalJS(`(()=>{const c=[...document.querySelectorAll("div")].find(d=>d.innerText.includes("On-chain record")); return c?c.innerText.slice(0,400):"NO CARD"})()`), null, 1));

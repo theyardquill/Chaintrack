@@ -12,14 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-interface WalletLink {
-  address: string;
-  chainId: string;
-  isPrimary: boolean;
-  verifiedAt: number;
-  label?: string;
-}
+import { linkWalletAddress, type LinkedWallet } from "@/lib/link-wallet";
 
 interface MeResponse {
   user?: {
@@ -28,20 +21,9 @@ interface MeResponse {
     email?: string;
     phone: string;
     role: string;
-    wallets: WalletLink[];
+    wallets: LinkedWallet[];
   };
   error?: string;
-}
-
-interface Eip1193Provider {
-  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
-}
-
-function utf8ToHex(input: string): string {
-  const bytes = new TextEncoder().encode(input);
-  let hex = "0x";
-  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
-  return hex;
 }
 
 function short(addr: string): string {
@@ -50,7 +32,7 @@ function short(addr: string): string {
 
 export function WalletLinkCard() {
   const { isSignedIn } = useAuth();
-  const [wallets, setWallets] = useState<WalletLink[]>([]);
+  const [wallets, setWallets] = useState<LinkedWallet[]>([]);
   const [loading, setLoading] = useState(true);
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,43 +64,10 @@ export function WalletLinkCard() {
 
   const connectWallet = useCallback(async () => {
     setError(null);
-    const ethereum = (window as unknown as { ethereum?: Eip1193Provider }).ethereum;
-    if (!ethereum) {
-      setError("No Ethereum wallet detected. Install MetaMask to link a wallet.");
-      return;
-    }
     setLinking(true);
     try {
-      const { getActiveAccount } = await import("@/lib/web3");
-      const address = await getActiveAccount();
-      const hexChain = (await ethereum.request({ method: "eth_chainId" })) as string;
-      const chainId = String(parseInt(hexChain, 16));
-
-      const nonceRes = await fetch("/api/auth/wallet/nonce", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address, chainId }),
-      });
-      const nonceBody = (await nonceRes.json()) as { message?: string; error?: string };
-      if (!nonceRes.ok || !nonceBody.message) {
-        throw new Error(nonceBody.error ?? "could not start wallet linking");
-      }
-
-      const signature = (await ethereum.request({
-        method: "personal_sign",
-        params: [utf8ToHex(nonceBody.message), address],
-      })) as string;
-
-      const verifyRes = await fetch("/api/auth/wallet/verify", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: nonceBody.message, signature }),
-      });
-      const verifyBody = (await verifyRes.json()) as MeResponse;
-      if (!verifyRes.ok) {
-        throw new Error(verifyBody.error ?? "wallet verification failed");
-      }
-      setWallets(verifyBody.user?.wallets ?? []);
+      const { wallets: linked } = await linkWalletAddress();
+      setWallets(linked);
     } catch (e) {
       setError(e instanceof Error ? e.message : "wallet linking failed");
     } finally {

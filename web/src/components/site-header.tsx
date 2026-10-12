@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Link2,
+  Loader2,
   LogIn,
   LogOut,
   Menu,
@@ -20,8 +21,9 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserButton, useAuth as useClerkAuth } from "@clerk/nextjs";
-import { useChainTrack } from "@/lib/chain";
 import { useAuth } from "@/lib/use-auth";
+import { useWallet } from "@/lib/wallet-context";
+import { linkWalletAddress } from "@/lib/link-wallet";
 import { cn } from "cn";
 
 const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
@@ -87,20 +89,96 @@ const NAV = [
   { href: "/admin", label: "Admin", icon: ShieldCheck },
 ];
 
-function WalletButton() {
-  const { wallet, connectWallet } = useChainTrack();
-  return wallet ? (
-    <Button variant="outline" className="font-mono">
-      <Wallet /> {wallet.slice(0, 6)}…{wallet.slice(-4)}
-    </Button>
-  ) : (
-    <Button
-      onClick={connectWallet}
-      className="bg-primary text-primary-foreground hover:bg-primary/90"
+function shortAddress(addr: string): string {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function WalletError({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <span
+      className="hidden max-w-[14rem] truncate text-xs text-destructive md:inline"
+      title={message}
     >
-      <Wallet /> Connect wallet
-    </Button>
+      {message}
+    </span>
   );
+}
+
+function LocalWalletButton() {
+  const { wallet, walletError, connecting, connectWallet } = useWallet();
+  return (
+    <div className="flex items-center gap-2">
+      <WalletError message={walletError} />
+      {wallet ? (
+        <Button variant="outline" className="font-mono" title={wallet}>
+          <Wallet /> {shortAddress(wallet)}
+        </Button>
+      ) : (
+        <Button
+          onClick={() => void connectWallet()}
+          disabled={connecting}
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
+        >
+          {connecting ? <Loader2 className="animate-spin" /> : <Wallet />} Connect wallet
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// In Clerk mode the header button also links the wallet to the signed-in
+// account (SIWE), so the same connection powers checkpoint logging and escrow.
+function ClerkWalletButton() {
+  const { isLoaded, isSignedIn } = useClerkAuth();
+  const { wallet, walletError, connecting, connectWallet, setWallet } = useWallet();
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  if (!isLoaded) return null;
+
+  const onConnect = async () => {
+    setLinkError(null);
+    const account = await connectWallet();
+    if (!account || !isSignedIn) return;
+    setLinking(true);
+    try {
+      const { address } = await linkWalletAddress();
+      setWallet(address);
+    } catch (e) {
+      setLinkError(e instanceof Error ? e.message : "wallet linking failed");
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const busy = connecting || linking;
+  const error = linkError ?? walletError;
+
+  return (
+    <div className="flex items-center gap-2">
+      <WalletError message={error} />
+      {wallet ? (
+        <Link href="/account" title={wallet}>
+          <Button variant="outline" className="font-mono">
+            <Wallet /> {shortAddress(wallet)}
+          </Button>
+        </Link>
+      ) : (
+        <Button
+          onClick={() => void onConnect()}
+          disabled={busy}
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
+        >
+          {busy ? <Loader2 className="animate-spin" /> : <Wallet />} Connect wallet
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function WalletButton() {
+  return clerkEnabled ? <ClerkWalletButton /> : <LocalWalletButton />;
 }
 
 export function SiteHeader() {

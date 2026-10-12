@@ -179,9 +179,7 @@ export function OnChainRecord({ code }: OnChainRecordProps) {
                   {txn.status} · {escrowAmount} {txn.currency}
                 </Badge>
               )}
-              <span className="text-xs text-muted-foreground">
-                package #{pkg.id} · sender #{pkg.senderId} → receiver #{pkg.receiverId}
-              </span>
+              <span className="font-mono text-xs text-muted-foreground">{pkg.qrHash}</span>
             </div>
 
             <TrackingTimeline checkpoints={checkpoints} />
@@ -220,7 +218,6 @@ export function OnChainRecord({ code }: OnChainRecordProps) {
             {(pkg.status === "Delivered" || txHash) && (
               <ReceiptCard
                 code={pkg.qrHash}
-                chainPackageId={pkg.id}
                 chainHash={receiptHash}
                 storedHash={storedReceiptHash}
               />

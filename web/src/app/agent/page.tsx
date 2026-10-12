@@ -183,7 +183,7 @@ export default function AgentDashboardPage() {
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">
-                      {pkg?.qrHash ?? `#${c.packageId}`} — {c.location}
+                      {pkg?.qrHash ?? "Unknown code"} — {c.location}
                     </p>
                     <p className="flex items-center gap-1 text-xs text-muted-foreground">
                       <StatusBadge status={c.status} />
