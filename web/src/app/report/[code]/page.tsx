@@ -24,6 +24,9 @@ import {
 import { STATUS_LABEL, type Checkpoint, type Package, type Transaction } from "@/lib/types";
 import { fmtAmount, fmtDate } from "@/lib/format";
 
+import type { PackageDetail } from "@/lib/db/repo";
+import type { Role } from "@/lib/types";
+
 const TXN_PLAIN: Record<Transaction["status"], string> = {
   Pending: "Payment is pending.",
   InEscrow: "Payment is held safely in escrow until delivery is confirmed.",
@@ -64,12 +67,115 @@ export default function ReportPage() {
   const chain = useChainContract();
   const { state } = useChainTrack();
   const { packageByCode, userById, txnForPackage, checkpointsForPackage } = useStoreState(state);
-
   const pkg = packageByCode(code);
-  const sender = pkg ? userById(pkg.senderId) : undefined;
-  const receiver = pkg ? userById(pkg.receiverId) : undefined;
   const txn = pkg ? txnForPackage(pkg.id) : undefined;
   const checkpoints = pkg ? checkpointsForPackage(pkg.id) : [];
+  const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "clerk";
+  const [apiDetail, setApiDetail] = useState<PackageDetail | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      if (!clerkEnabled || !code) {
+        if (active) setApiDetail(null);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/packages/${encodeURIComponent(code)}`, {
+          cache: "no-store",
+        });
+        if (!active) return;
+        if (res.status === 404) {
+          if (active) setApiDetail(null);
+          return;
+        }
+        const data = (await res.json().catch(() => ({}))) as PackageDetail & { error?: string };
+        if (!res.ok) {
+          if (active) setApiDetail(null);
+          return;
+        }
+        if (active) setApiDetail(data);
+      } catch (e) {
+        if (active) {
+          console.error("Failed to fetch package detail", e);
+          setApiDetail(null);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [clerkEnabled, code]);
+
+  // Determine source data: demo store or API (Clerk mode)
+  const sourcePkg = clerkEnabled
+    ? apiDetail?.pkg
+      ? {
+          id: apiDetail.pkg._id,
+          qrHash: apiDetail.pkg.qrHash,
+          contentHash: apiDetail.pkg.contentHash,
+          weight: apiDetail.pkg.weight,
+          size: apiDetail.pkg.size,
+          senderId: apiDetail.pkg.senderId,
+          receiverId: apiDetail.pkg.receiverId,
+          activeAgentId: apiDetail.pkg.activeAgentId,
+          status: apiDetail.pkg.status,
+          createdAt: apiDetail.pkg.createdAt,
+          deliveredAt: apiDetail.pkg.deliveredAt,
+        }
+      : undefined
+    : pkg;
+
+  const sourceTxn = clerkEnabled
+    ? apiDetail?.txn
+      ? {
+          id: apiDetail.txn._id,
+          packageId: apiDetail.txn.packageId,
+          senderId: apiDetail.txn.senderId,
+          receiverId: apiDetail.txn.receiverId,
+          amount: apiDetail.txn.amount,
+          currency: apiDetail.txn.currency,
+          status: apiDetail.txn.status,
+          createdAt: apiDetail.txn.createdAt,
+          settledAt: apiDetail.txn.settledAt,
+        }
+      : null
+    : txn;
+
+  const sourceCheckpoints = clerkEnabled
+    ? (apiDetail?.checkpoints?.map((c) => ({
+        id: c._id,
+        packageId: c.packageId,
+        agentId: c.agentId,
+        location: c.location,
+        timestamp: c.timestamp,
+        status: c.status,
+        lat: c.lat,
+        lng: c.lng,
+      })) ?? [])
+    : checkpoints;
+
+  // Build a map of people for quick lookup (only in Clerk mode)
+  const peopleMap = new Map(
+    clerkEnabled
+      ? apiDetail?.people.map((p) => [p.id, p]) ?? []
+      : []
+  );
+
+  // Helper to get person by id with fallback
+  const getPerson = (id: number) => {
+    const person = peopleMap.get(id);
+    if (person) return person;
+    // Fallback to store (demo mode) if available
+    if (!clerkEnabled) {
+      const u = userById(id);
+      if (u) return { id: u.id, name: u.name, phone: u.phone, role: u.role };
+    }
+    return { id, name: `User #${id}`, phone: "", role: "NONE" as Role };
+  };
+
+  const sender = sourcePkg ? getPerson(sourcePkg.senderId) : undefined;
+  const receiver = sourcePkg ? getPerson(sourcePkg.receiverId) : undefined;
 
   const [chainFacts, setChainFacts] = useState<ChainFacts | null>(null);
   const [lookupDone, setLookupDone] = useState(false);
@@ -127,9 +233,9 @@ export default function ReportPage() {
     }
   };
 
-  const reportPkg = chainFacts?.pkg ?? pkg;
-  const reportTxn = chainFacts?.txn ?? txn ?? null;
-  const journey = chainFacts ? [...chainFacts.checkpoints].reverse() : checkpoints;
+  const reportPkg = chainFacts?.pkg ?? sourcePkg;
+  const reportTxn = chainFacts?.txn ?? sourceTxn ?? null;
+  const journey = chainFacts ? [...chainFacts.checkpoints].reverse() : sourceCheckpoints;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -160,13 +266,13 @@ export default function ReportPage() {
         </div>
       </div>
 
-      {(pkg || chainFacts) && (
+      {(reportPkg || chainFacts) && (
         <Card className="border-emerald-600/40">
           <CardContent className="space-y-4 pt-6">
             <div className="flex flex-wrap items-center gap-3">
               {reportPkg && <StatusBadge status={reportPkg.status} />}
               <span className="font-mono text-lg font-semibold tracking-tight">
-                {pkg?.qrHash ?? code}
+                {reportPkg?.qrHash ?? code}
               </span>
               <span className="ml-auto text-xs text-muted-foreground">
                 Report generated {generatedAt}
@@ -307,7 +413,7 @@ export default function ReportPage() {
         </Card>
       )}
 
-      {!pkg && chain.status !== "ready" && (
+      {!sourcePkg && chain.status !== "ready" && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Connect to view the ledger report</CardTitle>
@@ -323,7 +429,7 @@ export default function ReportPage() {
       )}
 
       <div className="flex items-center gap-2 pt-2 print:hidden">
-        <Link href={pkg ? `/track?code=${pkg.qrHash}` : "/track"}>
+        <Link href={sourcePkg ? `/track?code=${sourcePkg.qrHash}` : "/track"}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back to tracking
           </Button>

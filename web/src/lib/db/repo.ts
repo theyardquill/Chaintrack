@@ -336,7 +336,7 @@ export interface PackageDetail {
   pkg: PackageDoc;
   txn: TransactionDoc | null;
   checkpoints: CheckpointDoc[];
-  people: { id: number; name: string; role: Role }[];
+  people: { id: number; name: string; phone: string; role: Role }[];
 }
 
 // Public lookup by tracking code — returns no secrets (delivery code is stripped
@@ -353,12 +353,17 @@ export async function getPackageByCode(code: string): Promise<PackageDetail | nu
   if (pkg.activeAgentId != null) ids.add(pkg.activeAgentId);
   const people = await users.find({ appUserId: { $in: [...ids] } }).toArray();
 
-  return {
-    pkg,
-    txn,
-    checkpoints: cps,
-    people: people.map((u) => ({ id: u.appUserId ?? -1, name: u.name, role: u.role })),
-  };
+    return {
+      pkg,
+      txn,
+      checkpoints: cps,
+      people: people.map((u) => ({
+        id: u.appUserId ?? -1,
+        name: u.name,
+        phone: u.phone,
+        role: u.role,
+      })),
+    };
 }
 
 export async function listActivePackages(): Promise<PackageDoc[]> {
