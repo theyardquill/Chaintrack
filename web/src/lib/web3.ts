@@ -110,6 +110,75 @@ export interface ChainTrackConnection {
   chainId: string;
 }
 
+const DEPLOYED_CHAIN_IDS = Object.keys(deployments.networks);
+
+export const isDeployedChain = (chainId: string): boolean => {
+  const network = deployments.networks[chainId as keyof typeof deployments.networks];
+  return Boolean(network?.ChainTrack?.address);
+};
+
+export const getWalletChainId = async (): Promise<string | null> => {
+  if (!window.ethereum) return null;
+  try {
+    const hex = (await window.ethereum.request({ method: "eth_chainId" })) as string;
+    return hex ? String(parseInt(hex, 16)) : null;
+  } catch {
+    return null;
+  }
+};
+
+interface NetworkMeta {
+  name: string;
+  rpc: string;
+  symbol: string;
+}
+
+const NETWORK_META: Record<string, NetworkMeta> = {
+  "1337": { name: "Localhost 8545", rpc: "http://127.0.0.1:8545", symbol: "ETH" },
+};
+
+// Asks the wallet to switch to a network the contract actually has an address
+// for. Only attempted when there is a single known target, so the intent is
+// unambiguous.
+const switchToDeployedNetwork = async (): Promise<string | null> => {
+  if (!window.ethereum) return null;
+  const targets = Object.entries(deployments.networks)
+    .filter(([, n]) => Boolean(n?.ChainTrack?.address))
+    .map(([id]) => id);
+  if (targets.length !== 1) return null;
+  const target = targets[0];
+  const hex = "0x" + Number(target).toString(16);
+  try {
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: hex }],
+    });
+    return target;
+  } catch (err) {
+    const code = (err as { code?: number })?.code;
+    const meta = NETWORK_META[target];
+    if (code === 4902 && meta) {
+      try {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [
+            {
+              chainId: hex,
+              chainName: meta.name,
+              rpcUrls: [meta.rpc],
+              nativeCurrency: { name: "Ether", symbol: meta.symbol, decimals: 18 },
+            },
+          ],
+        });
+        return target;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+};
+
 export const getChainTrack = async (): Promise<ChainTrackConnection> => {
   // Rebuild from the modern EIP-1193 provider if the cached instance is missing
   // or is a legacy/shim object without `.eth` (some extensions inject a bare
@@ -131,7 +200,22 @@ export const getChainTrack = async (): Promise<ChainTrackConnection> => {
       "Could not read the network from your wallet. Reconnect MetaMask and try again.",
     );
   }
-  const networkData = deployments.networks[chainId as keyof typeof deployments.networks];
+
+  let networkData = deployments.networks[chainId as keyof typeof deployments.networks];
+
+  // If the wallet is on a network we have no deployment for, try to switch it
+  // to one we do, then re-read the chain id from the wallet.
+  if (!networkData?.ChainTrack?.address && window.ethereum) {
+    const switched = await switchToDeployedNetwork();
+    if (switched) {
+      try {
+        chainId = (await web3.eth.getChainId()).toString();
+      } catch {
+        chainId = switched;
+      }
+      networkData = deployments.networks[chainId as keyof typeof deployments.networks];
+    }
+  }
 
   if (networkData && networkData.ChainTrack && networkData.ChainTrack.address) {
     const contract = new web3.eth.Contract(
@@ -141,10 +225,10 @@ export const getChainTrack = async (): Promise<ChainTrackConnection> => {
     return { contract, web3, address: networkData.ChainTrack.address, chainId };
   }
 
-  const available = Object.keys(deployments.networks).join(", ");
+  const available = DEPLOYED_CHAIN_IDS.join(", ");
   throw new Error(
-    `ChainTrack not deployed on chainId ${chainId}. Available networks: ${available}. ` +
-      `Run: pnpm --filter contracts deploy`
+    `ChainTrack isn't deployed on chainId ${chainId}. Switch your wallet to network ` +
+      `${available}, or uncheck on-chain recording to save the booking off-chain.`,
   );
 };
 

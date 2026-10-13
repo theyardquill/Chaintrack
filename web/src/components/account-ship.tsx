@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useChainContract } from "@/lib/use-chain-contract";
-import { chainGetUserByAddress } from "@/lib/web3";
+import { chainGetUserByAddress, getWalletChainId, isDeployedChain } from "@/lib/web3";
 import type { Role } from "@/lib/types";
 
 const SIZES = ["S", "M", "L", "XL"];
@@ -44,13 +44,6 @@ function shortAddress(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-function hasInjectedWallet(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    Boolean((window as unknown as { ethereum?: unknown }).ethereum)
-  );
-}
-
 export function AccountShip() {
   const { isLoaded, isSignedIn } = useAuth();
   const chain = useChainContract();
@@ -69,6 +62,7 @@ export function AccountShip() {
   const [booked, setBooked] = useState<{ qrHash: string; txHash?: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [recordOnChain, setRecordOnChain] = useState(false);
+  const [walletNetworkOk, setWalletNetworkOk] = useState(false);
 
   const qrHash = useMemo(() => genCode(), []);
 
@@ -86,11 +80,17 @@ export function AccountShip() {
         if (!active) return;
         const user = meBody.user ?? null;
         setMe(user);
-        // Only default to on-chain escrow when the account already has a wallet;
-        // otherwise book off-chain so the demo works without MetaMask.
+        // Only default to on-chain escrow when the account has a wallet that is
+        // already on a network the contract is deployed to; otherwise book
+        // off-chain so the demo works without switching networks or MetaMask.
         const linkedWallet =
           user?.wallets.find((w) => w.isPrimary)?.address ?? user?.wallets[0]?.address;
-        setRecordOnChain(Boolean(linkedWallet) && hasInjectedWallet());
+        const walletChainId = await getWalletChainId();
+        const onDeployed = walletChainId != null && isDeployedChain(walletChainId);
+        setWalletNetworkOk(onDeployed);
+        setRecordOnChain(
+          Boolean(linkedWallet) && onDeployed,
+        );
         setReceivers(dirBody.users ?? []);
         if (dirBody.users?.[0]) setReceiverId(String(dirBody.users[0].id));
       } catch {
@@ -318,8 +318,11 @@ export function AccountShip() {
               <span>
                 Lock escrow on-chain (requires a connected wallet).
                 <span className="block text-xs text-muted-foreground">
-                  Uncheck to record the booking off-chain in your account only — useful for demos
-                  without a wallet.
+                  {!primaryWallet
+                    ? "Uncheck to record the booking off-chain in your account only — no wallet needed."
+                    : walletNetworkOk
+                      ? "Uncheck to record the booking off-chain in your account only."
+                      : "Your wallet is on another network — switch it to the deployed network to lock escrow, or uncheck to book off-chain."}
                 </span>
               </span>
             </label>

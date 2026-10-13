@@ -19,6 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ChainStatus } from "@/components/chain-status";
 import { LocationPicker } from "@/components/location-picker";
 import { useChainContract } from "@/lib/use-chain-contract";
+import { getWalletChainId, isDeployedChain } from "@/lib/web3";
 import { STATUS_LABEL, type PackageStatus, type Role } from "@/lib/types";
 
 const NEXT_STATUS: Record<PackageStatus, PackageStatus[]> = {
@@ -37,13 +38,6 @@ interface ActivePackage {
   chain?: { chainId: string; contract: string; onChainId: number; txHash?: string };
 }
 
-function hasInjectedWallet(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    Boolean((window as unknown as { ethereum?: unknown }).ethereum)
-  );
-}
-
 export function AccountCheckpoint() {
   const { isLoaded, isSignedIn } = useAuth();
   const chain = useChainContract();
@@ -59,6 +53,7 @@ export function AccountCheckpoint() {
   const [lastEvent, setLastEvent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [writeOnChain, setWriteOnChain] = useState(false);
+  const [walletOnDeployedChain, setWalletOnDeployedChain] = useState(false);
 
   useEffect(() => {
     if (!isSignedIn) return;
@@ -82,9 +77,13 @@ export function AccountCheckpoint() {
         );
         const loaded = pkgBody.packages ?? [];
         setPackages(loaded);
-        // Default on-chain only when the package was booked on-chain; otherwise
-        // log the checkpoint off-chain so the demo needs no wallet.
-        setWriteOnChain(Boolean(loaded[0]?.chain?.onChainId) && hasInjectedWallet());
+        // Default on-chain only when the package was booked on-chain and the
+        // wallet is on a deployed network; otherwise log the checkpoint
+        // off-chain so the demo needs no network switch or wallet.
+        const walletChainId = await getWalletChainId();
+        const onDeployed = walletChainId != null && isDeployedChain(walletChainId);
+        setWalletOnDeployedChain(onDeployed);
+        setWriteOnChain(Boolean(loaded[0]?.chain?.onChainId) && onDeployed);
         if (loaded[0]) {
           setPackageId(String(loaded[0]._id));
           setStatus(NEXT_STATUS[loaded[0].status][0] ?? "InTransit");
@@ -208,7 +207,7 @@ export function AccountCheckpoint() {
               const next = activePackages.find((p) => p._id === Number(v));
               const opts = next ? NEXT_STATUS[next.status] : [];
               setStatus(opts[0] ?? "InTransit");
-              setWriteOnChain(Boolean(next?.chain?.onChainId) && hasInjectedWallet());
+              setWriteOnChain(Boolean(next?.chain?.onChainId) && walletOnDeployedChain);
             }}
           >
             <SelectTrigger className="w-full">
@@ -286,9 +285,11 @@ export function AccountCheckpoint() {
               <span>
                 Write this checkpoint on-chain (requires a connected wallet).
                 <span className="block text-xs text-muted-foreground">
-                  {current?.chain?.onChainId
-                    ? "Uncheck to log the checkpoint off-chain in your account only."
-                    : "This package is tracked off-chain, so no wallet is needed."}
+                  {!current?.chain?.onChainId
+                    ? "This package is tracked off-chain, so no wallet is needed."
+                    : walletOnDeployedChain
+                      ? "Uncheck to log the checkpoint off-chain in your account only."
+                      : "Your wallet is on another network — switch it to the deployed network, or leave this off to log off-chain."}
                 </span>
               </span>
             </label>
