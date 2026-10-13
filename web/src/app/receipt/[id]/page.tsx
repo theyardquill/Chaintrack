@@ -149,8 +149,8 @@ export default function ReceiptPage() {
         <div>
           <h1 className="text-2xl font-semibold">Proof of delivery</h1>
           <p className="text-sm text-muted-foreground">
-            Receipt <span className="font-mono">#{reference}</span> · escrowed on the ChainTrack
-            ledger
+            Receipt <span className="font-mono">{pkg?.qrHash ?? raw}</span> · escrowed on the
+            ChainTrack ledger
           </p>
         </div>
         <div className="flex items-center gap-2 print:hidden">
