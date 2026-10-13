@@ -74,8 +74,8 @@ function AdminShell() {
     setRegMsg(null);
     setRegErr(null);
     try {
-      const address = addrByUser[u.id]?.trim() || chain.wallet || "";
-      if (!address) throw new Error("Enter or connect the wallet address for this user.");
+      const address = addrByUser[u.id]?.trim() || u.wallet || "";
+      if (!address) throw new Error("Enter this participant's own wallet address.");
       const tx = await chain.registerUser({
         address,
         name: u.name,
@@ -258,7 +258,7 @@ function AdminShell() {
                   </TableCell>
                   <TableCell>
                     <Input
-                      value={addrByUser[u.id] ?? chain.wallet ?? ""}
+                      value={addrByUser[u.id] ?? u.wallet ?? ""}
                       onChange={(e) =>
                         setAddrByUser((prev) => ({ ...prev, [u.id]: e.target.value }))
                       }

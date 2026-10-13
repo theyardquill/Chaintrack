@@ -8,6 +8,7 @@ import type {
   User,
 } from "./types";
 import { coordsFor } from "./geo";
+import { demoIdentityForRole } from "./demo-identities";
 
 const STORAGE_KEY = "chaintrack-demo-v1";
 const HOUR = 3_600_000;
@@ -20,7 +21,7 @@ const DAY = 24 * HOUR;
 
 function seed(): ChainTrackState {
   const now = Date.now();
-  const users: User[] = [
+  const seeded: User[] = [
     { id: 1, name: "Alice Sender", phone: "+254711000001", role: "SENDER" },
     { id: 2, name: "Bob Receiver", phone: "+254711000002", role: "RECEIVER" },
     { id: 3, name: "Courier Corp", phone: "+254711000003", role: "AGENT" },
@@ -28,6 +29,13 @@ function seed(): ChainTrackState {
     { id: 5, name: "David Otieno", phone: "+254711000005", role: "RECEIVER" },
     { id: 6, name: "Swift Logistics", phone: "+254711000006", role: "AGENT" },
   ];
+  const users: User[] = seeded.map((u) => {
+    // Pre-bind each seeded participant to the demo on-chain identity for its
+    // role so booking/checkpoint work without the counterparty connecting a
+    // wallet (the addresses are registered on the local Hardhat network).
+    const identity = demoIdentityForRole(u.role);
+    return identity ? { ...u, wallet: identity.address } : u;
+  });
   const packages: Package[] = [
     {
       id: 1,

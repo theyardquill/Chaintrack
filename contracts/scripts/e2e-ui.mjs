@@ -131,8 +131,8 @@ async function main() {
     if (!ok) throw new Error(`Assertion failed: ${name}`);
   };
 
-  // ---- 1. Admin: connect as owner; bind demo users' wallets to the seeded
-  //      on-chain identities (seed already registered them on the contract).
+  // ---- 1. Admin: connect as owner; verify the demo store seeds each user with
+  //      the role's on-chain identity (seed already registered them on-chain).
   await goto(`${BASE}/admin/login`);
   await evalJS(`localStorage.removeItem("chaintrack-demo-v1")`);
   await evalJS(`localStorage.setItem("chaintrack-session", JSON.stringify({type:"admin",id:"admin"}))`);
@@ -141,8 +141,8 @@ async function main() {
   await clickByText("Connect wallet to unlock on-chain escrow");
   await sleep(2500);
   check("admin connects as registry owner", await has("registry owner"));
-  const bound = await evalJS(`(()=>{const s=JSON.parse(localStorage.getItem("chaintrack-demo-v1")); if(!s) return "NO STORE"; s.users=s.users.map(u=>{ if(u.id===1) u.wallet=${JSON.stringify(ACCT[0])}; if(u.id===2) u.wallet=${JSON.stringify(ACCT[1])}; if(u.id===3) u.wallet=${JSON.stringify(ACCT[2])}; return u;}); localStorage.setItem("chaintrack-demo-v1", JSON.stringify(s)); return "OK";})()`);
-  check("demo wallets bound to seeded identities", bound === "OK", bound);
+  const seeded = await evalJS(`(()=>{const s=JSON.parse(localStorage.getItem("chaintrack-demo-v1")); if(!s) return "NO STORE"; return s.users.filter(u=>[1,2,3].includes(u.id)).map(u=>u.wallet).join(",");})()`);
+  check("demo identities seeded with role wallets", seeded === `${ACCT[0]},${ACCT[1]},${ACCT[2]}`, seeded);
 
   // ---- 2. Ship: book a fresh package on-chain (Alice = sender).
   await goto(`${BASE}/ship`);

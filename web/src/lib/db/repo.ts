@@ -1,5 +1,6 @@
 import { Web3 } from "web3";
 import { getCollections } from "./collections";
+import { demoIdentityForRole } from "../demo-identities";
 import type {
   CheckpointDoc,
   PackageDoc,
@@ -157,12 +158,49 @@ export async function listDirectory(role?: Role): Promise<DirectoryEntry[]> {
   const filter: Record<string, unknown> = { appUserId: { $ne: null } };
   if (role) filter.role = role;
   const rows = await users.find(filter).sort({ name: 1 }).limit(500).toArray();
+
+  // Demo convenience: participants who haven't linked a wallet yet are bound to
+  // the demo on-chain identity for their role, so a shipment can be booked or a
+  // checkpoint logged without the *other* party having to connect first. Real
+  // linked wallets always win; this only fills empties.
+  const now = Date.now();
+  await Promise.all(
+    rows.map(async (u) => {
+      if ((u.wallets?.length ?? 0) > 0) return;
+      const identity = demoIdentityForRole(u.role);
+      if (!identity) return;
+      await users.updateOne(
+        { _id: u._id },
+        {
+          $set: {
+            wallets: [
+              {
+                address: identity.address,
+                chainId: "1337",
+                label: "demo",
+                isPrimary: true,
+                verifiedAt: now,
+              },
+            ],
+            updatedAt: now,
+          },
+        },
+      );
+    }),
+  );
+
+  const walletOf = (u: (typeof rows)[number]) =>
+    u.wallets.find((w) => w.isPrimary)?.address ??
+    u.wallets[0]?.address ??
+    demoIdentityForRole(u.role)?.address;
+
   return rows.map((u) => ({
     id: u.appUserId ?? -1,
     name: u.name,
     role: u.role,
-    wallet: u.wallets.find((w) => w.isPrimary)?.address ?? u.wallets[0]?.address,
-    onChainUserId: u.onChainUserId ?? null,
+    wallet: walletOf(u),
+    onChainUserId:
+      u.onChainUserId ?? demoIdentityForRole(u.role)?.onChainUserId ?? null,
   }));
 }
 
