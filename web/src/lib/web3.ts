@@ -111,10 +111,26 @@ export interface ChainTrackConnection {
 }
 
 export const getChainTrack = async (): Promise<ChainTrackConnection> => {
-  if (!window.web3) await loadWeb3();
+  // Rebuild from the modern EIP-1193 provider if the cached instance is missing
+  // or is a legacy/shim object without `.eth` (some extensions inject a bare
+  // `window.web3`), otherwise a stale value would crash on `web3.eth.*`.
+  if (!window.web3?.eth) await loadWeb3();
 
-  const web3 = window.web3!;
-  const chainId = (await web3.eth.getChainId()).toString();
+  const web3 = window.web3;
+  if (!web3?.eth) {
+    throw new Error(
+      "No browser wallet detected. Install MetaMask and connect it to sign on-chain transactions.",
+    );
+  }
+
+  let chainId: string;
+  try {
+    chainId = (await web3.eth.getChainId()).toString();
+  } catch {
+    throw new Error(
+      "Could not read the network from your wallet. Reconnect MetaMask and try again.",
+    );
+  }
   const networkData = deployments.networks[chainId as keyof typeof deployments.networks];
 
   if (networkData && networkData.ChainTrack && networkData.ChainTrack.address) {
