@@ -44,6 +44,13 @@ function shortAddress(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+function hasInjectedWallet(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    Boolean((window as unknown as { ethereum?: unknown }).ethereum)
+  );
+}
+
 export function AccountShip() {
   const { isLoaded, isSignedIn } = useAuth();
   const chain = useChainContract();
@@ -61,6 +68,7 @@ export function AccountShip() {
   const [progress, setProgress] = useState<string | null>(null);
   const [booked, setBooked] = useState<{ qrHash: string; txHash?: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [recordOnChain, setRecordOnChain] = useState(false);
 
   const qrHash = useMemo(() => genCode(), []);
 
@@ -76,7 +84,13 @@ export function AccountShip() {
         const meBody = (await meRes.json().catch(() => ({}))) as MeResponse;
         const dirBody = (await dirRes.json().catch(() => ({}))) as { users?: DirectoryEntry[] };
         if (!active) return;
-        setMe(meBody.user ?? null);
+        const user = meBody.user ?? null;
+        setMe(user);
+        // Only default to on-chain escrow when the account already has a wallet;
+        // otherwise book off-chain so the demo works without MetaMask.
+        const linkedWallet =
+          user?.wallets.find((w) => w.isPrimary)?.address ?? user?.wallets[0]?.address;
+        setRecordOnChain(Boolean(linkedWallet) && hasInjectedWallet());
         setReceivers(dirBody.users ?? []);
         if (dirBody.users?.[0]) setReceiverId(String(dirBody.users[0].id));
       } catch {
@@ -115,39 +129,53 @@ export function AccountShip() {
     try {
       if (!me || me.appUserId == null) throw new Error("your account is not ready yet");
       if (me.role !== "SENDER") throw new Error("set your role to sender first");
-      if (!primaryWallet) throw new Error("link a wallet on the account page first");
       const receiver = receivers.find((r) => r.id === Number(receiverId));
       if (!receiver) throw new Error("pick a receiver");
-      if (!receiver.wallet) throw new Error("that receiver has not linked a wallet yet");
       if (!content.trim()) throw new Error("describe the package contents");
       if (deliveryCode.trim().length < 4) throw new Error("delivery code must be at least 4 characters");
       if (Number(amount) <= 0) throw new Error("escrow amount must be greater than zero");
-
-      // Connect the wallet and resolve the contract as part of booking.
-      setProgress("Connecting wallet…");
-      const { connection, wallet: account } = await chain.ensureConnection();
-      if (account.toLowerCase() !== primaryWallet.toLowerCase()) {
-        throw new Error(
-          `Connect the wallet linked to your account (${shortAddress(primaryWallet)}).`,
-        );
+      if (recordOnChain && !receiver.wallet) {
+        throw new Error("that receiver has not linked a wallet yet");
       }
 
-      setProgress("Locking escrow on-chain…");
-      const onChainId =
-        receiver.onChainUserId ?? (await chainGetUserByAddress(receiver.wallet)).id;
+      let chainMeta:
+        | { chainId: string; contract: string; onChainId: number; txHash?: string }
+        | undefined;
 
-      const { packageId, txHash } = await chain.bookShipment(
-        {
-          qrHash,
-          contentHash: content,
-          weight: Number(weight),
-          size,
-          receiverId: onChainId,
-          deliveryCode,
-          currency: "ETH",
-        },
-        amount,
-      );
+      if (recordOnChain) {
+        if (!primaryWallet) throw new Error("link a wallet on the account page first");
+        // Connect the wallet and resolve the contract as part of booking.
+        setProgress("Connecting wallet…");
+        const { connection, wallet: account } = await chain.ensureConnection();
+        if (account.toLowerCase() !== primaryWallet.toLowerCase()) {
+          throw new Error(
+            `Connect the wallet linked to your account (${shortAddress(primaryWallet)}).`,
+          );
+        }
+
+        setProgress("Locking escrow on-chain…");
+        const onChainId =
+          receiver.onChainUserId ?? (await chainGetUserByAddress(receiver.wallet!)).id;
+
+        const { packageId, txHash } = await chain.bookShipment(
+          {
+            qrHash,
+            contentHash: content,
+            weight: Number(weight),
+            size,
+            receiverId: onChainId,
+            deliveryCode,
+            currency: "ETH",
+          },
+          amount,
+        );
+        chainMeta = {
+          chainId: connection.chainId,
+          contract: connection.address,
+          onChainId: packageId,
+          txHash,
+        };
+      }
 
       setProgress("Saving to your account…");
       const res = await fetch("/api/packages", {
@@ -162,18 +190,13 @@ export function AccountShip() {
           amount: Number(amount),
           currency: "ETH",
           deliveryCode,
-          chain: {
-            chainId: connection.chainId,
-            contract: connection.address,
-            onChainId: packageId,
-            txHash,
-          },
+          ...(chainMeta ? { chain: chainMeta } : {}),
         }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? "could not save the shipment");
 
-      setBooked({ qrHash, txHash });
+      setBooked({ qrHash, txHash: chainMeta?.txHash });
       setContent("");
       setDeliveryCode("");
     } catch (err) {
@@ -197,8 +220,9 @@ export function AccountShip() {
       <div>
         <h1 className="text-2xl font-semibold">Book a shipment</h1>
         <p className="text-sm text-muted-foreground">
-          Funds are locked in on-chain escrow and released when the recipient confirms delivery.
-          Your booking is recorded on the contract and mirrored to your account.
+          {recordOnChain
+            ? "Funds are locked in on-chain escrow and released when the recipient confirms delivery. Your booking is recorded on the contract and mirrored to your account."
+            : "The escrow amount is recorded in your account and released when the recipient confirms delivery."}
         </p>
       </div>
 
@@ -284,6 +308,21 @@ export function AccountShip() {
           </CardHeader>
           <CardContent className="space-y-3">
             <ChainStatus chain={chain} />
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <Input
+                type="checkbox"
+                checked={recordOnChain}
+                onChange={(e) => setRecordOnChain(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                Lock escrow on-chain (requires a connected wallet).
+                <span className="block text-xs text-muted-foreground">
+                  Uncheck to record the booking off-chain in your account only — useful for demos
+                  without a wallet.
+                </span>
+              </span>
+            </label>
             {primaryWallet ? (
               <p className="text-xs text-muted-foreground">
                 Linked wallet <span className="font-mono">{primaryWallet}</span>
@@ -293,8 +332,8 @@ export function AccountShip() {
                 No linked wallet.{" "}
                 <Link href="/account" className="underline">
                   Link one on your account
-                </Link>
-                .
+                </Link>{" "}
+                to escrow on-chain, or book off-chain without one.
               </p>
             )}
           </CardContent>
@@ -308,7 +347,12 @@ export function AccountShip() {
         )}
 
         <Button type="submit" size="lg" className="w-full" disabled={busy}>
-          <Send /> {busy ? (progress ?? "Booking & locking escrow…") : "Book shipment & lock escrow"}
+          <Send />{" "}
+          {busy
+            ? (progress ?? (recordOnChain ? "Booking & locking escrow…" : "Booking…"))
+            : recordOnChain
+              ? "Book shipment & lock escrow"
+              : "Book shipment"}
         </Button>
       </form>
 
@@ -317,8 +361,11 @@ export function AccountShip() {
           <AlertTitle>Shipment booked</AlertTitle>
           <AlertDescription className="space-y-2">
             <p>
-              {booked.qrHash} registered on-chain and in your account
-              {booked.txHash ? ` · tx ${booked.txHash}` : ""}. Send this link to your recipient:
+              {booked.qrHash}{" "}
+              {booked.txHash
+                ? `registered on-chain and in your account · tx ${booked.txHash}`
+                : "recorded in your account"}
+              . Send this link to your recipient:
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 truncate rounded-md bg-muted px-2 py-1 text-xs">

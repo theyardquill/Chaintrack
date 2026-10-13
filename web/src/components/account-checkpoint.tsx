@@ -37,6 +37,13 @@ interface ActivePackage {
   chain?: { chainId: string; contract: string; onChainId: number; txHash?: string };
 }
 
+function hasInjectedWallet(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    Boolean((window as unknown as { ethereum?: unknown }).ethereum)
+  );
+}
+
 export function AccountCheckpoint() {
   const { isLoaded, isSignedIn } = useAuth();
   const chain = useChainContract();
@@ -51,6 +58,7 @@ export function AccountCheckpoint() {
   const [busy, setBusy] = useState(false);
   const [lastEvent, setLastEvent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [writeOnChain, setWriteOnChain] = useState(false);
 
   useEffect(() => {
     if (!isSignedIn) return;
@@ -74,6 +82,9 @@ export function AccountCheckpoint() {
         );
         const loaded = pkgBody.packages ?? [];
         setPackages(loaded);
+        // Default on-chain only when the package was booked on-chain; otherwise
+        // log the checkpoint off-chain so the demo needs no wallet.
+        setWriteOnChain(Boolean(loaded[0]?.chain?.onChainId) && hasInjectedWallet());
         if (loaded[0]) {
           setPackageId(String(loaded[0]._id));
           setStatus(NEXT_STATUS[loaded[0].status][0] ?? "InTransit");
@@ -120,7 +131,7 @@ export function AccountCheckpoint() {
       const nextStatus = selectableStatus as PackageStatus;
 
       let chainMeta: ActivePackage["chain"];
-      if (current.chain?.onChainId) {
+      if (writeOnChain && current.chain?.onChainId) {
         if (!myWallet) throw new Error("link a wallet on your account page first");
         const { wallet: account } = await chain.ensureConnection();
         if (account.toLowerCase() !== myWallet.toLowerCase()) {
@@ -178,8 +189,8 @@ export function AccountCheckpoint() {
       <div>
         <h1 className="text-2xl font-semibold">Agent checkpoint console</h1>
         <p className="text-sm text-muted-foreground">
-          Log a package&apos;s location and status. Each event is written on-chain and mirrored to
-          your account.
+          Log a package&apos;s location and status. Each event is recorded in your account, and
+          written on-chain too when the package is tracked on-chain.
         </p>
       </div>
 
@@ -197,6 +208,7 @@ export function AccountCheckpoint() {
               const next = activePackages.find((p) => p._id === Number(v));
               const opts = next ? NEXT_STATUS[next.status] : [];
               setStatus(opts[0] ?? "InTransit");
+              setWriteOnChain(Boolean(next?.chain?.onChainId) && hasInjectedWallet());
             }}
           >
             <SelectTrigger className="w-full">
@@ -263,6 +275,23 @@ export function AccountCheckpoint() {
           </CardHeader>
           <CardContent className="space-y-3">
             <ChainStatus chain={chain} />
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <Input
+                type="checkbox"
+                checked={writeOnChain}
+                onChange={(e) => setWriteOnChain(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+                disabled={!current?.chain?.onChainId}
+              />
+              <span>
+                Write this checkpoint on-chain (requires a connected wallet).
+                <span className="block text-xs text-muted-foreground">
+                  {current?.chain?.onChainId
+                    ? "Uncheck to log the checkpoint off-chain in your account only."
+                    : "This package is tracked off-chain, so no wallet is needed."}
+                </span>
+              </span>
+            </label>
           </CardContent>
         </Card>
 
