@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Boxes, Loader2, MapPin, PackageCheck, Send, Timer, TrendingUp } from "lucide-react";
+import { Boxes, Loader2, MapPin, PackageCheck, RotateCcw, Send, Timer, TrendingUp } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useChainContract } from "@/lib/use-chain-contract";
 import {
   Table,
   TableBody,
@@ -28,6 +30,7 @@ interface PackageRow {
   status: PackageStatus;
   createdAt: number;
   deliveredAt: number | null;
+  chain?: { chainId: string; contract: string; onChainId: number; txHash?: string };
 }
 
 interface TxnRow {
@@ -52,7 +55,13 @@ interface CheckpointRow {
 }
 
 interface Overview {
-  user: { _id: string; appUserId: number | null; name: string; role: Role };
+  user: {
+    _id: string;
+    appUserId: number | null;
+    name: string;
+    role: Role;
+    wallets: { address: string; isPrimary: boolean }[];
+  };
   packages: PackageRow[];
   transactions: TxnRow[];
   checkpoints: CheckpointRow[];
@@ -61,30 +70,37 @@ interface Overview {
 
 export function AccountDashboard() {
   const { isLoaded, isSignedIn } = useAuth();
+  const chain = useChainContract();
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [refundedCode, setRefundedCode] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/account/overview", { cache: "no-store" });
+      const body = (await res.json().catch(() => ({}))) as Overview & { error?: string };
+      if (!res.ok) setError(body.error ?? `failed to load (${res.status})`);
+      else {
+        setData(body);
+        setError(null);
+      }
+    } catch {
+      setError("network error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isSignedIn) return;
-    let active = true;
     void (async () => {
-      try {
-        const res = await fetch("/api/account/overview", { cache: "no-store" });
-        const body = (await res.json().catch(() => ({}))) as Overview & { error?: string };
-        if (!active) return;
-        if (!res.ok) setError(body.error ?? `failed to load (${res.status})`);
-        else setData(body);
-      } catch {
-        if (active) setError("network error");
-      } finally {
-        if (active) setLoading(false);
-      }
+      await Promise.resolve();
+      await load();
     })();
-    return () => {
-      active = false;
-    };
-  }, [isSignedIn]);
+  }, [isSignedIn, load]);
 
   if (!isLoaded || loading) {
     return (
@@ -150,8 +166,57 @@ export function AccountDashboard() {
     .sort((a, b) => b.c.timestamp - a.c.timestamp)
     .slice(0, 6);
 
+  const handleCancel = async (p: PackageRow) => {
+    setActionError(null);
+    setCancellingId(p._id);
+    try {
+      let chainMeta: PackageRow["chain"];
+      if (p.chain?.onChainId) {
+        const linked =
+          data.user.wallets.find((w) => w.isPrimary)?.address ?? data.user.wallets[0]?.address;
+        if (!linked) throw new Error("link the wallet you booked this shipment with");
+        const { wallet: account } = await chain.ensureConnection();
+        if (account.toLowerCase() !== linked.toLowerCase()) {
+          throw new Error("connect the wallet linked to your account");
+        }
+        const txHash = await chain.cancelShipment(p.chain.onChainId);
+        chainMeta = { ...p.chain, txHash };
+      }
+
+      const res = await fetch(`/api/packages/${encodeURIComponent(p.qrHash)}/cancel`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chain: chainMeta }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? "could not cancel the shipment");
+
+      setRefundedCode(p.qrHash);
+      await load();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      {actionError && (
+        <Alert variant="default">
+          <AlertTitle>Could not cancel shipment</AlertTitle>
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      )}
+      {refundedCode && (
+        <Alert>
+          <RotateCcw className="h-4 w-4" />
+          <AlertTitle>Shipment cancelled</AlertTitle>
+          <AlertDescription>
+            {refundedCode} was cancelled and the escrow refunded to the sender.
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">
@@ -243,12 +308,26 @@ export function AccountDashboard() {
                       <StatusBadge status={p.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Link
-                        href={`/track?code=${p.qrHash}`}
-                        className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                      >
-                        View
-                      </Link>
+                      <div className="flex items-center justify-end gap-3">
+                        {isSender && p.status === "Registered" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={cancellingId === p._id}
+                            onClick={() => handleCancel(p)}
+                          >
+                            <RotateCcw />
+                            {cancellingId === p._id ? "Cancelling…" : "Cancel"}
+                          </Button>
+                        )}
+                        <Link
+                          href={`/track?code=${p.qrHash}`}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                        >
+                          View
+                        </Link>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

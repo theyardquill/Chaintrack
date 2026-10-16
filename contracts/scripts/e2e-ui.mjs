@@ -314,6 +314,34 @@ async function main() {
   }
   check("seed package escrow locked", escrowOk);
 
+  // ---- 7. Escrow refund: book a shipment and cancel it before pickup.
+  await goto(`${BASE}/ship`);
+  await evalJS(`localStorage.removeItem("chaintrack-session")`);
+  await sleep(800);
+  await clickByText("Connect wallet to unlock on-chain escrow");
+  await sleep(2000);
+  await setInput("e.g. electronics, documents…", "cancel test goods");
+  await setInput("MFA code for confirmation", "CAN-1111");
+  await clickByText("Book shipment & lock escrow");
+  for (let i = 0; i < 30; i++) {
+    if (await has("Shipment booked")) break;
+    await sleep(500);
+  }
+  check("booked a shipment to cancel", await has("Shipment booked"));
+  const code3 = await evalJS(`(()=>{const m=document.body.innerText.match(/track\\?code=(CTK-\\d{4})/); return m?m[1]:null;})()`);
+  check("got cancel-test tracking code", !!code3, code3 ?? "none");
+  await goto(`${BASE}/track?code=${code3}`);
+  await sleep(1200);
+  check("cancel card shown for registered shipment", await has("Cancel shipment"));
+  await clickByText("Cancel & refund escrow");
+  for (let i = 0; i < 20; i++) {
+    if (await has("Escrow refunded to the sender")) break;
+    await sleep(500);
+  }
+  check("escrow refunded on cancel", await has("Escrow refunded to the sender"));
+  const cancelledState = await evalJS(`(()=>{try{const s=JSON.parse(localStorage.getItem("chaintrack-demo-v1")); const p=s.packages.find(x=>x.qrHash===${JSON.stringify(code3)}); const t=s.transactions.find(x=>x.packageId===p?.id); return JSON.stringify({pkg:p?.status,txn:t?.status});}catch{return "ERR";}})()`);
+  check("cancel marks package Cancelled and escrow Refunded", cancelledState === JSON.stringify({ pkg: "Cancelled", txn: "Refunded" }), cancelledState);
+
   console.log(results.join("\n"));
   ws.close();
   await sleep(300);

@@ -370,6 +370,51 @@ export async function confirmDelivery(
   return { pkg: updated ?? pkg, txn };
 }
 
+export interface CancelShipmentInput {
+  chain?: ChainMeta;
+}
+
+// Sender cancels a shipment before pickup, refunding the escrow. Mirrors the
+// on-chain cancelShipment (which returns the locked funds to the sender).
+export async function cancelShipment(
+  clerkId: string,
+  code: string,
+  input: CancelShipmentInput,
+): Promise<{ pkg: PackageDoc; txn: TransactionDoc | null }> {
+  const account = await ensureAccount(clerkId);
+  if (account.appUserId == null) throw new Error("account is not ready");
+
+  const { packages, transactions } = await getCollections();
+  const pkg = await packages.findOne({ qrHash: code });
+  if (!pkg) throw new Error("package not found");
+  if (pkg.senderId !== account.appUserId) {
+    throw new Error("only the sender can cancel this shipment");
+  }
+  if (pkg.status !== "Registered") {
+    throw new Error("only shipments that have not been picked up can be cancelled");
+  }
+
+  const now = Date.now();
+  await packages.updateOne(
+    { _id: pkg._id },
+    {
+      $set: {
+        status: "Cancelled",
+        updatedAt: now,
+        ...(input.chain ? { chain: input.chain } : {}),
+      },
+    },
+  );
+  await transactions.updateOne(
+    { packageId: pkg._id },
+    { $set: { status: "Refunded", settledAt: now, updatedAt: now } },
+  );
+
+  const updated = await packages.findOne({ _id: pkg._id });
+  const txn = await transactions.findOne({ packageId: pkg._id });
+  return { pkg: updated ?? pkg, txn };
+}
+
 export interface PackageDetail {
   pkg: PackageDoc;
   txn: TransactionDoc | null;

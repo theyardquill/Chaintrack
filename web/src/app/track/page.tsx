@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, ScanSearch, Share2, Wallet } from "lucide-react";
+import { CheckCircle2, RotateCcw, ScanSearch, Share2, Wallet } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,13 +22,14 @@ const clerkEnabled = (process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "demo") === "cler
 
 function TrackContent() {
   const params = useSearchParams();
-  const { state, confirm } = useChainTrack();
+  const { state, confirm, cancel } = useChainTrack();
   const { packageByCode, checkpointsForPackage, userById, txnForPackage } = useStoreState(state);
 
   const [query, setQuery] = useState(params.get("code") ?? "");
   const [searched, setSearched] = useState(params.get("code") ?? "");
   const [code, setCode] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
 
   const pkg = packageByCode(searched);
   const sender = pkg ? userById(pkg.senderId) : undefined;
@@ -39,6 +40,7 @@ function TrackContent() {
     e.preventDefault();
     setSearched(query);
     setConfirmed(false);
+    setCancelled(false);
   };
 
   const handleConfirm = (e: React.FormEvent) => {
@@ -46,6 +48,14 @@ function TrackContent() {
     if (!pkg) return;
     confirm(pkg.id, code);
     setConfirmed(true);
+  };
+
+  const handleCancel = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pkg) return;
+    cancel(pkg.id);
+    setCancelled(true);
+    setConfirmed(false);
   };
 
   return (
@@ -137,6 +147,35 @@ function TrackContent() {
             </Card>
           )}
 
+          {pkg.status === "Registered" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Cancel shipment</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Cancel before pickup to release the escrow back to the sender.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCancel}
+                  disabled={cancelled}
+                >
+                  <RotateCcw /> Cancel &amp; refund escrow
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {cancelled && (
+            <Alert>
+              <RotateCcw className="h-4 w-4" />
+              <AlertTitle>Shipment cancelled</AlertTitle>
+              <AlertDescription>Escrow refunded to the sender.</AlertDescription>
+            </Alert>
+          )}
+
           {pkg.status === "OutForDelivery" && (
             <Card>
               <CardHeader>
@@ -154,17 +193,18 @@ function TrackContent() {
                     Confirm
                   </Button>
                 </form>
-                {confirmed && (
-                  <Alert>
-                    <CheckCircle2 className="h-4 w-4" />
-                    <AlertTitle>Delivery confirmed</AlertTitle>
-                    <AlertDescription>
-                      Escrow released to the sender. This event has been written to the ledger.
-                    </AlertDescription>
-                  </Alert>
-                )}
               </CardContent>
             </Card>
+          )}
+
+          {confirmed && (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertTitle>Delivery confirmed</AlertTitle>
+              <AlertDescription>
+                Escrow released to the sender. This event has been written to the ledger.
+              </AlertDescription>
+            </Alert>
           )}
         </>
       )}
